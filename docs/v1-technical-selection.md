@@ -4,7 +4,7 @@ This document records the implementation choices made strictly from `epub-to-md-
 
 ## Runtime and language
 
-- Runtime target: Node.js `20.14.x`
+- Supported runtime targets: Node.js `20`, `22`, and `24`
 - Language: TypeScript
 - Module output: CommonJS for a simple Node CLI distribution path
 
@@ -15,7 +15,7 @@ This document records the implementation choices made strictly from `epub-to-md-
 | CLI parsing | `commander` | Mature, minimal, standard `-h/-V/-o` surface |
 | EPUB unzip to temp dir | `extract-zip` | Small, established, matches the "unpack into temporary working area" pipeline |
 | XML parsing | `fast-xml-parser` | Mature, fast, good fit for `container.xml`, OPF, and NCX |
-| XHTML/DOM handling | `jsdom@26.1.0` | Stable DOM API and compatible with Node `20.14.x` |
+| XHTML/DOM handling | `jsdom@26.1.0` | Stable DOM API and compatible with the supported Node.js runtimes |
 | HTML to Markdown | `turndown` | Widely used baseline converter for conservative Markdown generation |
 | GFM table support | `turndown-plugin-gfm` | Provides a starting point for simple-table conversion without inventing a custom renderer too early |
 
