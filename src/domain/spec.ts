@@ -7,7 +7,7 @@ export const FRONT_MATTER_FIELDS = [
   "language",
   "identifier",
   "publisher",
-  "date",
+  "published",
 ] as const;
 
 export const REMOVABLE_TAGS = new Set([

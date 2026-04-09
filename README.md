@@ -62,6 +62,7 @@ The generated Markdown follows this high-level structure:
 title: Example Book
 creator: Example Author
 language: en
+published: 2026-04-09
 ---
 
 # Example Book

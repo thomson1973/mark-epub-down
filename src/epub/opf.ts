@@ -88,8 +88,26 @@ function mapMetadata(metadataNode: Record<string, unknown>): BookMetadata {
     language: readFirstString(metadataNode.language),
     identifier: readFirstString(metadataNode.identifier),
     publisher: readFirstString(metadataNode.publisher),
-    date: readFirstString(metadataNode.date),
+    published: normalizePublishedDate(readFirstString(metadataNode.date)),
   };
+}
+
+function normalizePublishedDate(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}(?:[Tt ].+)$/.test(trimmed)) {
+    return trimmed.slice(0, 10);
+  }
+
+  return trimmed;
 }
 
 function mapManifestItem(node: Record<string, string>): ManifestItem {

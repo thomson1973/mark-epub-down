@@ -62,9 +62,11 @@ The front matter stays minimal and only includes values available from EPUB pack
 - `language`
 - `identifier`
 - `publisher`
-- `date`
+- `published`
 
 Missing metadata fields are omitted rather than guessed.
+
+`published` is mapped from EPUB `dc:date`. Full dates and date-times are normalized to `YYYY-MM-DD`. Partial dates such as `YYYY` or `YYYY-MM` are preserved as-is rather than padded with guessed precision.
 
 ## Conversion Rules
 

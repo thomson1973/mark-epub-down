@@ -101,6 +101,75 @@ test("converts a basic EPUB into the expected document skeleton and suppresses d
   }
 });
 
+test("maps EPUB dc:date to published and normalizes full timestamps to YYYY-MM-DD", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: {
+        title: "Published Book",
+        date: "2026-04-09T11:22:33Z",
+      },
+      manifestItems: [{ id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" }],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1>Chapter</h1>
+    `),
+  });
+  const output = await createOutputPath("published.md");
+
+  try {
+    await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: createCaptureStream().stream,
+      stderr: createCaptureStream().stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.match(markdown, /\npublished: "2026-04-09"\n/);
+    assert.doesNotMatch(markdown, /\ndate: /);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("preserves partial EPUB dc:date precision instead of guessing a day", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: {
+        title: "Partial Date Book",
+        date: "2026-04",
+      },
+      manifestItems: [{ id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" }],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1>Chapter</h1>
+    `),
+  });
+  const output = await createOutputPath("partial-date.md");
+
+  try {
+    await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: createCaptureStream().stream,
+      stderr: createCaptureStream().stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.match(markdown, /\npublished: "2026-04"\n/);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
 test("renders br as a plain newline instead of a trailing backslash hard break", async () => {
   const fixture = await createEpubArchive({
     mimetype: "application/epub+zip\n",
