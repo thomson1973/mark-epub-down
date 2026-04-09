@@ -4,13 +4,13 @@
 
 `mark-epub-down` is a Node.js CLI that converts a single EPUB into a single Markdown document.
 
-The v1 output is intended as source material for LLM, wiki, or knowledge-base ingestion. The project prioritizes semantic preservation, source correctness, and low-risk transformation over reader-oriented Markdown polish.
+The v1 output is intended as source material for LLM knowledge bases, wikis, and related ingestion pipelines. The project prioritizes semantic preservation, source correctness, and low-risk transformation over reader-oriented Markdown polish.
 
 ## Scope
 
 - Input: one `.epub` file
 - Output: one `.md` file
-- Runtime target: Node.js `20.14.x`
+- Supported runtime targets: Node.js `20`, `22`, and `24`
 - Implementation language: TypeScript
 
 ## Goals

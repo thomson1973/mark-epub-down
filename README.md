@@ -1,6 +1,6 @@
 # mark-epub-down
 
-Convert a single EPUB into a single Markdown source document for LLM, wiki, and knowledge-base ingestion.
+Convert a single EPUB into a single Markdown source document for LLM knowledge bases, wikis, and related ingestion pipelines.
 
 ## Why
 

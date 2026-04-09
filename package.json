@@ -1,7 +1,7 @@
 {
   "name": "mark-epub-down",
   "version": "0.1.0",
-  "description": "EPUB to Markdown source generator for LLM/wiki ingestion",
+  "description": "EPUB to Markdown source generator for LLM knowledge bases, wikis, and related ingestion pipelines",
   "bin": {
     "epub2md": "dist/cli.js"
   },
