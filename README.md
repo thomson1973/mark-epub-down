@@ -53,8 +53,6 @@ Show CLI help:
 node dist/cli.js --help
 ```
 
-If this package is linked or distributed as a CLI binary, the command name is `epub2md`.
-
 ## Output Shape
 
 The generated Markdown follows this high-level structure:
