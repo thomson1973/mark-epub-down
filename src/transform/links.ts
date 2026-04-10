@@ -16,6 +16,8 @@ export function buildAnchorMap(
   const anchorMap = new Map<string, string>();
 
   for (const item of documents) {
+    // Reserve a synthetic per-document anchor so whole-document TOC entries and
+    // links can still target the merged single-file output.
     const docStartKey = buildTargetKey(item.relativePath);
     const docStartAnchor = buildMergedAnchor(item.idref, "start");
     setAnchor(anchorMap, docStartKey, docStartAnchor, warnings);
@@ -95,6 +97,8 @@ export function rewriteInternalLinks(
       continue;
     }
 
+    // Degrade unresolved internal targets to plain text instead of emitting a
+    // merged-document link that looks valid but points nowhere.
     warnings.add(...buildUnresolvedLinkWarning(linkNode, currentDocumentPath, href));
     unwrapNode(linkNode);
   }
@@ -136,6 +140,8 @@ function setAnchor(
 ): void {
   const existing = anchorMap.get(targetKey);
   if (existing && existing !== mergedAnchor) {
+    // Keep the first stable mapping and warn rather than guessing between
+    // colliding source targets from different spine documents.
     warnings.add("ANCHOR_COLLISION", `anchor collision detected; a later target may remain unresolved: ${targetKey}`);
     return;
   }
@@ -152,6 +158,8 @@ function createAnchorElement(document: Document, anchorId: string): HTMLAnchorEl
 function injectAnchorTarget(element: Element, anchor: HTMLAnchorElement): void {
   const tagName = element.tagName.toLowerCase();
   if (tagName === "li") {
+    // Placing the anchor inside the list item preserves list structure in the
+    // downstream Markdown conversion better than inserting a sibling before it.
     element.prepend(anchor);
     return;
   }

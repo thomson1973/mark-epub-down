@@ -6,6 +6,8 @@ EPUB-to-Markdown CLI and Node.js package for LLM knowledge bases, wikis, and rel
 
 This project focuses on producing semantically useful Markdown from EPUB input. The v1 goal is not visual EPUB reproduction. It prioritizes source order, document structure, TOC preservation, and conservative transformation rules.
 
+The target output is text-first Markdown for LLM knowledge bases, wikis, and related ingestion workflows. In many current ingestion setups, preserving raw image assets or Markdown image links does not reliably produce usable downstream image understanding, while it does add complexity and processing cost.
+
 ## What v1 Does
 
 - converts one EPUB into one Markdown file
@@ -135,7 +137,7 @@ published: 2026-04-09
 - Fixed Layout EPUB (FXL) is out of scope for the v1 baseline
 - some internal links or TOC targets may degrade to plain text when they cannot be rewritten safely
 - complex tables may remain as HTML instead of being flattened into incorrect Markdown
-- images and other high-confidence non-text media are removed by default in v1
+- images and other high-confidence non-text media are removed by default in v1 as a deliberate text-first ingestion boundary
 - output files are never overwritten silently; interactive terminal use may ask for explicit confirmation
 
 ## Roadmap

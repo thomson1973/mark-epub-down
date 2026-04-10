@@ -14,6 +14,8 @@ export function createMarkdownConverter(): TurndownService {
   service.use(gfm);
 
   service.addRule("anchorTarget", {
+    // Preserve injected merge anchors verbatim so rewritten intra-book links
+    // still have stable Markdown-visible targets after turndown runs.
     filter(node: HTMLElement) {
       return node.nodeName.toLowerCase() === "a" && node.hasAttribute("id") && !node.hasAttribute("href");
     },
@@ -41,6 +43,8 @@ export function createMarkdownConverter(): TurndownService {
   });
 
   service.addRule("complexTable", {
+    // Keep complex tables as HTML when flattening them to Markdown would lose
+    // important structure or cell relationships.
     filter(node: HTMLElement) {
       return isMarkedComplexTable(node);
     },
@@ -52,6 +56,8 @@ export function createMarkdownConverter(): TurndownService {
   });
 
   service.addRule("ruby", {
+    // Emit a readable inline fallback for ruby so the base text and reading
+    // both survive in plain Markdown-oriented ingestion flows.
     filter: "ruby",
     replacement(_content: string, node: Node) {
       const base = Array.from(node.childNodes as NodeListOf<ChildNode>)

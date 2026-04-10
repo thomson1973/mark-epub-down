@@ -37,6 +37,8 @@ function cleanupEmptyContainers(root: HTMLElement | null): void {
       continue;
     }
 
+    // Only prune known structural wrappers after child cleanup so surrounding
+    // text containers survive even when embedded media has already been dropped.
     const hasVisibleText = child.textContent?.trim().length;
     const hasStructuralId = child.hasAttribute("id");
 

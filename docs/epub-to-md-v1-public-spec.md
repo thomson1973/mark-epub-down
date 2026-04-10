@@ -112,6 +112,8 @@ Missing metadata fields are omitted rather than guessed.
 - Only high-confidence non-text elements are removed by default.
 - Empty containers may be removed only when they carry no visible text, no preserved children, and no necessary structure.
 
+This default cleanup boundary is intentional. The v1 output is designed for text-first Markdown ingestion, and the project does not assume that downstream systems will reliably resolve Markdown image references or separately ingest raw image assets as multimodal inputs.
+
 The default removable set includes:
 
 - `script`
@@ -134,6 +136,8 @@ The default removable set includes:
 - `textarea`
 
 Containers such as `figure`, `figcaption`, `aside`, `section`, `nav`, `div`, and `span` are not removed purely by tag name.
+
+As a result, surrounding text structure can still survive even when embedded non-text media is dropped.
 
 ### Core element mapping
 
