@@ -22,6 +22,7 @@ export interface ConvertEpubOptions {
   outputPath?: string;
   cwd?: string;
   interactive?: boolean;
+  stdin?: NodeJS.ReadableStream;
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
 }
@@ -37,11 +38,16 @@ export async function convertEpub(options: ConvertEpubOptions): Promise<ConvertE
   const inputPath = path.resolve(cwd, options.inputPath);
   const outputPath = deriveOutputPath(inputPath, options.outputPath, cwd);
   const warnings = new WarningCollector();
+  const stdin = options.stdin ?? process.stdin;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
 
   await assertInputExists(inputPath);
-  await ensureOutputPathAvailable(outputPath);
+  await ensureOutputPathAvailable(outputPath, {
+    interactive: options.interactive,
+    stdin,
+    stderr,
+  });
 
   const workingDirectory = await createWorkingDirectory();
 
@@ -69,7 +75,7 @@ export async function convertEpub(options: ConvertEpubOptions): Promise<ConvertE
         const noun = tableResult.complexTableCount === 1 ? "table" : "tables";
         warnings.add(
           "COMPLEX_TABLE_PRESERVED",
-          `preserved ${tableResult.complexTableCount} complex ${noun} as HTML in ${loadedDocument.spineDocument.relativePath}`,
+          `preserved ${tableResult.complexTableCount} complex ${noun} as HTML because Markdown conversion would be lossy: ${loadedDocument.spineDocument.relativePath}`,
         );
       }
     }

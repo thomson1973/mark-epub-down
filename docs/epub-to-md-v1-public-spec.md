@@ -45,6 +45,7 @@ epub2md --version
 - `-o` and `--output` select an explicit output path.
 - If no output path is provided, the tool derives one from the input filename with a `.md` extension.
 - Existing output files are not overwritten silently.
+- In interactive terminal use, the CLI may prompt for explicit overwrite confirmation with a default `No` answer.
 
 ## Output Structure
 
@@ -152,6 +153,8 @@ Warnings still allow output generation and keep a success exit code. Typical war
 - dropped elements caused by cleanup rules
 - incomplete metadata
 - source structures that cannot be represented perfectly in Markdown
+
+Warnings may be summarized in CLI output, and some low-signal warnings may be retained only in structured results rather than shown in the terminal.
 
 ## Validation Boundary
 

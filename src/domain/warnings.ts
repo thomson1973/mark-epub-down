@@ -1,6 +1,10 @@
 import type { WarningRecord } from "./types";
 
-const SUPPRESSED_CLI_WARNING_CODES = new Set(["ELEMENTS_DROPPED"]);
+type WarningVisibility = "cli" | "structured-only";
+
+const WARNING_VISIBILITY: Record<string, WarningVisibility> = {
+  ELEMENTS_DROPPED: "structured-only",
+};
 
 export class WarningCollector {
   private readonly warnings: WarningRecord[] = [];
@@ -15,7 +19,7 @@ export class WarningCollector {
 }
 
 export function getCliVisibleWarnings(warnings: WarningRecord[]): WarningRecord[] {
-  return warnings.filter((warning) => !SUPPRESSED_CLI_WARNING_CODES.has(warning.code));
+  return warnings.filter((warning) => getWarningVisibility(warning.code) === "cli");
 }
 
 export function summarizeWarnings(warnings: WarningRecord[]): WarningRecord[] {
@@ -46,4 +50,8 @@ export function summarizeWarnings(warnings: WarningRecord[]): WarningRecord[] {
       message: `${warning.message} (${count} occurrences)`,
     };
   });
+}
+
+function getWarningVisibility(code: string): WarningVisibility {
+  return WARNING_VISIBILITY[code] ?? "cli";
 }

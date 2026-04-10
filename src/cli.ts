@@ -22,6 +22,7 @@ async function main(): Promise<void> {
           inputPath: input,
           outputPath: options.output,
           cwd: process.cwd(),
+          stdin: process.stdin,
           stdout: process.stdout,
           stderr: process.stderr,
           interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),

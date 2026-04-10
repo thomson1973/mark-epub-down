@@ -32,6 +32,17 @@ function createCaptureStream() {
   };
 }
 
+function createInputStream(text = "") {
+  const stream = new PassThrough();
+  if (text.length > 0) {
+    stream.end(text);
+    return stream;
+  }
+
+  stream.end();
+  return stream;
+}
+
 async function createOutputPath(name) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "epub2md-out-"));
   return {
@@ -202,6 +213,83 @@ test("renders br as a plain newline instead of a trailing backslash hard break",
   }
 });
 
+test("renders ruby as explicit text fallback instead of raw ruby markup", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Ruby Book", language: "ja" },
+      manifestItems: [{ id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" }],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1>第一章</h1>
+      <p><ruby>漢字<rt>かんじ</rt></ruby> を読む。</p>
+    `),
+  });
+  const output = await createOutputPath("ruby.md");
+
+  try {
+    await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: createCaptureStream().stream,
+      stderr: createCaptureStream().stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.match(markdown, /漢字（かんじ） を読む。/);
+    assert.doesNotMatch(markdown, /<ruby>|<rt>/);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("preserves RTL text in TOC and body content", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "RTL Book", language: "ar" },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc" dir="rtl">
+        <ol>
+          <li><a href="chapter1.xhtml#intro">الفصل الأول</a></li>
+        </ol>
+      </nav>
+    `),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1 id="intro" dir="rtl">الفصل الأول</h1>
+      <p dir="rtl">هذا نص عربي للاختبار.</p>
+    `),
+  });
+  const output = await createOutputPath("rtl.md");
+
+  try {
+    await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: createCaptureStream().stream,
+      stderr: createCaptureStream().stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.match(markdown, /\n## TOC\n\n- \[الفصل الأول\]\(#chapter1-intro\)\n/);
+    assert.match(markdown, /\n# الفصل الأول\n/);
+    assert.match(markdown, /هذا نص عربي للاختبار\./);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
 test("preserves synthetic start anchors for file-level TOC targets", async () => {
   const fixture = await createEpubArchive({
     mimetype: "application/epub+zip\n",
@@ -239,6 +327,58 @@ test("preserves synthetic start anchors for file-level TOC targets", async () =>
 
     assert.match(markdown, /\n## TOC\n\n- \[Chapter\]\(#chapter1-start\)\n/);
     assert.match(markdown, /<a id="chapter1-start"><\/a>/);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("keeps unresolved TOC items as plain text and warns without dropping resolved siblings", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Degraded TOC Book" },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc">
+        <ol>
+          <li><a href="chapter1.xhtml#intro">Resolved</a></li>
+          <li><a href="chapter1.xhtml#missing-target">Unresolved</a></li>
+          <li><span>Plain label</span></li>
+        </ol>
+      </nav>
+    `),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1 id="intro">Chapter</h1>
+      <p>Body</p>
+    `),
+  });
+  const output = await createOutputPath("degraded-toc.md");
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  try {
+    const result = await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.ok(result.warnings.some((warning) => warning.code === "TOC_TARGET_UNRESOLVED"));
+    assert.match(markdown, /\n## TOC\n\n- \[Resolved\]\(#chapter1-intro\)\n- Unresolved\n- Plain label\n/);
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_TARGET_UNRESOLVED\]: TOC entry was left as plain text because its target could not be mapped exactly: OEBPS\/chapter1.xhtml#missing-target/,
+    );
+    assert.match(stdout.text(), /\(1 warning\)\n$/);
   } finally {
     await fixture.cleanup();
     await output.cleanup();
@@ -304,6 +444,175 @@ test("preserves explicit footnote references and backlinks across merged output"
   }
 });
 
+test("preserves ordered list semantics for role-based endnotes stored as list items", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: {
+        title: "Role Endnote Book",
+        language: "en",
+      },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "notes", href: "notes.xhtml", mediaType: "application/xhtml+xml" },
+      ],
+      spineIds: ["chapter1", "notes"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc">
+        <ol>
+          <li><a href="chapter1.xhtml">Chapter 1</a></li>
+          <li><a href="notes.xhtml#n1">Notes</a></li>
+        </ol>
+      </nav>
+    `),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1>Chapter 1</h1>
+      <p>Alpha<a id="r1" role="doc-noteref" href="notes.xhtml#n1"><sup>1</sup></a>.</p>
+      <p>Beta<a id="r2" role="doc-noteref" href="notes.xhtml#n1"><sup>2</sup></a>.</p>
+    `),
+    "OEBPS/notes.xhtml": buildContentXhtml(`
+      <section role="doc-endnotes">
+        <ol>
+          <li id="n1" role="doc-endnote">
+            <p>Shared note <a role="doc-backlink" href="chapter1.xhtml#r1">↩1</a> <a role="doc-backlink" href="chapter1.xhtml#r2">↩2</a></p>
+          </li>
+        </ol>
+      </section>
+    `),
+  });
+  const output = await createOutputPath("role-endnotes.md");
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  try {
+    await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.match(markdown, /Alpha<a id="chapter1-r1"><\/a>\[<sup>1<\/sup>\]\(#notes-n1\)\./);
+    assert.match(markdown, /Beta<a id="chapter1-r2"><\/a>\[<sup>2<\/sup>\]\(#notes-n1\)\./);
+    assert.match(markdown, /\n1\.  <a id="notes-n1"><\/a>\s+Shared note \[↩1\]\(#chapter1-r1\) \[↩2\]\(#chapter1-r2\)/);
+    assert.equal(stderr.text(), "");
+    assert.equal(stdout.text(), `wrote ${output.outputPath}\n`);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("keeps sparse text from image-heavy EPUB content while dropping media elements", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Image Heavy Book" },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc">
+        <ol>
+          <li><a href="chapter1.xhtml">Gallery</a></li>
+        </ol>
+      </nav>
+    `),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <section>
+        <img src="plate-1.jpg" alt="plate 1"/>
+        <svg><text>ignored</text></svg>
+        <video src="clip.mp4"></video>
+        <p>Caption-like surviving text.</p>
+      </section>
+    `),
+  });
+  const output = await createOutputPath("image-heavy.md");
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  try {
+    const result = await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.ok(result.warnings.some((warning) => warning.code === "ELEMENTS_DROPPED"));
+    assert.match(markdown, /Caption-like surviving text\./);
+    assert.doesNotMatch(markdown, /<img|<svg|<video/);
+    assert.equal(stderr.text(), "");
+    assert.equal(stdout.text(), `wrote ${output.outputPath}\n`);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("treats row-header tables as simple Markdown tables without HTML fallback", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Row Header Table Book" },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc">
+        <ol><li><a href="chapter1.xhtml">Chapter</a></li></ol>
+      </nav>
+    `),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1>Chapter</h1>
+      <table>
+        <thead>
+          <tr><th>Term</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">A</th><td>Alpha</td></tr>
+          <tr><th scope="row">B</th><td>Beta</td></tr>
+        </tbody>
+      </table>
+    `),
+  });
+  const output = await createOutputPath("row-header-table.md");
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  try {
+    const result = await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.ok(!result.warnings.some((warning) => warning.code === "COMPLEX_TABLE_PRESERVED"));
+    assert.match(markdown, /\| Term \| Meaning \|\n\| --- \| --- \|\n\| A \| Alpha \|\n\| B \| Beta \|/);
+    assert.doesNotMatch(markdown, /<table/);
+    assert.equal(stderr.text(), "");
+    assert.equal(stdout.text(), `wrote ${output.outputPath}\n`);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
 test("preserves complex tables as HTML and emits a visible warning", async () => {
   const fixture = await createEpubArchive({
     mimetype: "application/epub+zip\n",
@@ -345,7 +654,51 @@ test("preserves complex tables as HTML and emits a visible warning", async () =>
 
     assert.ok(result.warnings.some((warning) => warning.code === "COMPLEX_TABLE_PRESERVED"));
     assert.match(markdown, /<table xmlns="http:\/\/www\.w3\.org\/1999\/xhtml">/);
-    assert.match(stderr.text(), /warning \[COMPLEX_TABLE_PRESERVED\]: preserved 1 complex table as HTML/);
+    assert.match(
+      stderr.text(),
+      /warning \[COMPLEX_TABLE_PRESERVED\]: preserved 1 complex table as HTML because Markdown conversion would be lossy: OEBPS\/chapter1.xhtml/,
+    );
+    assert.match(stdout.text(), /\(1 warning\)\n$/);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("treats a missing NCX manifest target as degraded TOC metadata instead of fatal OPF failure", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Missing TOC Manifest Target Book" },
+      manifestItems: [{ id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" }],
+      spineIds: ["chapter1"],
+      spineTocId: "missing-ncx",
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1>Chapter</h1>
+      <p>Body</p>
+    `),
+  });
+  const output = await createOutputPath("missing-toc-manifest-target.md");
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  try {
+    const result = await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+
+    assert.ok(result.warnings.some((warning) => warning.code === "TOC_MISSING"));
+    assert.match(markdown, /\n## TOC\n/);
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_MISSING\]: table of contents metadata could not be read; the generated TOC section will be empty\./,
+    );
     assert.match(stdout.text(), /\(1 warning\)\n$/);
   } finally {
     await fixture.cleanup();
@@ -382,7 +735,10 @@ test("treats missing TOC as a warning and still writes markdown", async () => {
 
     assert.ok(result.warnings.some((warning) => warning.code === "TOC_MISSING"));
     assert.match(markdown, /\n## TOC\n/);
-    assert.match(stderr.text(), /warning \[TOC_MISSING\]: EPUB TOC metadata is missing or unreadable\./);
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_MISSING\]: table of contents metadata could not be read; the generated TOC section will be empty\./,
+    );
     assert.match(stdout.text(), /\(1 warning\)\n$/);
   } finally {
     await fixture.cleanup();
@@ -430,8 +786,14 @@ test("treats an invalid nav document as a warning and still writes markdown", as
     assert.ok(result.warnings.some((warning) => warning.code === "TOC_NAV_INVALID"));
     assert.ok(result.warnings.some((warning) => warning.code === "TOC_MISSING"));
     assert.match(markdown, /\n## TOC\n/);
-    assert.match(stderr.text(), /warning \[TOC_NAV_INVALID\]: EPUB nav document could not be parsed: OEBPS\/nav.xhtml/);
-    assert.match(stderr.text(), /warning \[TOC_MISSING\]: EPUB TOC metadata is missing or unreadable\./);
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_NAV_INVALID\]: nav TOC document could not be parsed; trying other TOC sources: OEBPS\/nav.xhtml/,
+    );
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_MISSING\]: table of contents metadata could not be read; the generated TOC section will be empty\./,
+    );
     assert.match(stdout.text(), /\(2 warnings\)\n$/);
   } finally {
     await fixture.cleanup();
@@ -487,7 +849,10 @@ test("falls back to NCX when nav is invalid", async () => {
     assert.ok(result.warnings.some((warning) => warning.code === "TOC_NAV_INVALID"));
     assert.ok(!result.warnings.some((warning) => warning.code === "TOC_MISSING"));
     assert.match(markdown, /\n## TOC\n\n- \[Chapter\]\(#chapter1-intro\)\n/);
-    assert.match(stderr.text(), /warning \[TOC_NAV_INVALID\]: EPUB nav document could not be parsed: OEBPS\/nav.xhtml/);
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_NAV_INVALID\]: nav TOC document could not be parsed; trying other TOC sources: OEBPS\/nav.xhtml/,
+    );
     assert.doesNotMatch(stderr.text(), /TOC_MISSING/);
     assert.match(stdout.text(), /\(1 warning\)\n$/);
   } finally {
@@ -530,8 +895,14 @@ test("treats an unreadable NCX document as a warning and still writes markdown",
     assert.ok(result.warnings.some((warning) => warning.code === "TOC_NCX_UNREADABLE"));
     assert.ok(result.warnings.some((warning) => warning.code === "TOC_MISSING"));
     assert.match(markdown, /\n## TOC\n/);
-    assert.match(stderr.text(), /warning \[TOC_NCX_UNREADABLE\]: EPUB NCX document could not be read: OEBPS\/toc\.ncx/);
-    assert.match(stderr.text(), /warning \[TOC_MISSING\]: EPUB TOC metadata is missing or unreadable\./);
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_NCX_UNREADABLE\]: NCX TOC document could not be read; trying other TOC sources: OEBPS\/toc\.ncx/,
+    );
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_MISSING\]: table of contents metadata could not be read; the generated TOC section will be empty\./,
+    );
     assert.match(stdout.text(), /\(2 warnings\)\n$/);
   } finally {
     await fixture.cleanup();
@@ -576,8 +947,14 @@ test("treats an invalid NCX document as a warning and still writes markdown", as
     assert.ok(result.warnings.some((warning) => warning.code === "TOC_NCX_INVALID"));
     assert.ok(result.warnings.some((warning) => warning.code === "TOC_MISSING"));
     assert.match(markdown, /\n## TOC\n/);
-    assert.match(stderr.text(), /warning \[TOC_NCX_INVALID\]: EPUB NCX document could not be parsed: OEBPS\/toc\.ncx/);
-    assert.match(stderr.text(), /warning \[TOC_MISSING\]: EPUB TOC metadata is missing or unreadable\./);
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_NCX_INVALID\]: NCX TOC document could not be parsed; trying other TOC sources: OEBPS\/toc\.ncx/,
+    );
+    assert.match(
+      stderr.text(),
+      /warning \[TOC_MISSING\]: table of contents metadata could not be read; the generated TOC section will be empty\./,
+    );
     assert.match(stdout.text(), /\(2 warnings\)\n$/);
   } finally {
     await fixture.cleanup();
@@ -618,3 +995,140 @@ test("fails conservatively when output already exists", async () => {
     await output.cleanup();
   }
 });
+
+test("overwrites an existing output file after interactive confirmation", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Overwrite Confirmed Book" },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc">
+        <ol>
+          <li><a href="chapter1.xhtml">Chapter</a></li>
+        </ol>
+      </nav>
+    `),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`<h1>Chapter</h1><p>Updated body</p>`),
+  });
+  const output = await createOutputPath("overwrite-confirmed.md");
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  try {
+    await writeFile(output.outputPath, "already here", "utf8");
+
+    await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      interactive: true,
+      stdin: createInputStream("y\n"),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    const markdown = await readFile(output.outputPath, "utf8");
+    assert.match(stderr.text(), /overwrite existing output file\?.+\(y\/N\) /);
+    assert.match(stdout.text(), new RegExp(`^wrote ${escapeForRegExp(output.outputPath)}\\n$`));
+    assert.match(markdown, /\n# Overwrite Confirmed Book\n/);
+    assert.doesNotMatch(markdown, /already here/);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("rejects overwrite when interactive confirmation answer is negative", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Overwrite Rejected Book" },
+      manifestItems: [{ id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" }],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`<h1>Chapter</h1>`),
+  });
+  const output = await createOutputPath("overwrite-rejected.md");
+  const stderr = createCaptureStream();
+
+  try {
+    await writeFile(output.outputPath, "already here", "utf8");
+
+    await assert.rejects(
+      () =>
+        convertEpub({
+          inputPath: fixture.epubPath,
+          outputPath: output.outputPath,
+          interactive: true,
+          stdin: createInputStream("n\n"),
+          stderr: stderr.stream,
+        }),
+      (error) => {
+        assert.ok(error instanceof ConversionError);
+        assert.equal(error.code, "OUTPUT_EXISTS");
+        assert.match(error.message, /overwrite was not confirmed/);
+        return true;
+      },
+    );
+
+    const existingContent = await readFile(output.outputPath, "utf8");
+    assert.equal(existingContent, "already here");
+    assert.match(stderr.text(), /overwrite existing output file\?.+\(y\/N\) /);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("rejects overwrite when interactive confirmation receives EOF", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Overwrite EOF Book" },
+      manifestItems: [{ id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" }],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`<h1>Chapter</h1>`),
+  });
+  const output = await createOutputPath("overwrite-eof.md");
+  const stderr = createCaptureStream();
+
+  try {
+    await writeFile(output.outputPath, "already here", "utf8");
+
+    await assert.rejects(
+      () =>
+        convertEpub({
+          inputPath: fixture.epubPath,
+          outputPath: output.outputPath,
+          interactive: true,
+          stdin: createInputStream(),
+          stderr: stderr.stream,
+        }),
+      (error) => {
+        assert.ok(error instanceof ConversionError);
+        assert.equal(error.code, "OUTPUT_EXISTS");
+        return true;
+      },
+    );
+
+    const existingContent = await readFile(output.outputPath, "utf8");
+    assert.equal(existingContent, "already here");
+    assert.match(stderr.text(), /overwrite existing output file\?.+\(y\/N\) /);
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+function escapeForRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

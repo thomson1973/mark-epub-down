@@ -4,6 +4,7 @@
 /dist
 .DS_Store
 .idea/
+AGENTS.md
 
 /node_modules
 npm-debug.log*

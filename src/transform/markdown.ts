@@ -32,7 +32,7 @@ export function createMarkdownConverter(): TurndownService {
 
   service.addRule("noteContainer", {
     filter(node: HTMLElement) {
-      return isExplicitNoteBody(node);
+      return isExplicitNoteBody(node) && node.nodeName.toLowerCase() !== "li";
     },
     replacement(content: string) {
       const trimmed = content.trim();

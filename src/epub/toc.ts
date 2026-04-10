@@ -46,7 +46,7 @@ export async function parseTocDocument(
     }
   }
 
-  warnings.add("TOC_MISSING", "EPUB TOC metadata is missing or unreadable.");
+  warnings.add("TOC_MISSING", "table of contents metadata could not be read; the generated TOC section will be empty.");
 
   return {
     source: "missing",
@@ -63,7 +63,7 @@ async function parseNavDocument(
   try {
     navContent = await readFile(navPath, "utf8");
   } catch {
-    warnings.add("TOC_NAV_UNREADABLE", `EPUB nav document could not be read: ${navDocumentPath}`);
+    warnings.add("TOC_NAV_UNREADABLE", `nav TOC document could not be read; trying other TOC sources: ${navDocumentPath}`);
     return null;
   }
 
@@ -73,7 +73,7 @@ async function parseNavDocument(
       contentType: "application/xhtml+xml",
     });
   } catch {
-    warnings.add("TOC_NAV_INVALID", `EPUB nav document could not be parsed: ${navDocumentPath}`);
+    warnings.add("TOC_NAV_INVALID", `nav TOC document could not be parsed; trying other TOC sources: ${navDocumentPath}`);
     return null;
   }
 
@@ -126,7 +126,7 @@ async function parseNcxDocument(
   try {
     ncxContent = await readFile(ncxPath, "utf8");
   } catch {
-    warnings.add("TOC_NCX_UNREADABLE", `EPUB NCX document could not be read: ${ncxDocumentPath}`);
+    warnings.add("TOC_NCX_UNREADABLE", `NCX TOC document could not be read; trying other TOC sources: ${ncxDocumentPath}`);
     return null;
   }
 
@@ -146,7 +146,7 @@ async function parseNcxDocument(
       };
     };
   } catch {
-    warnings.add("TOC_NCX_INVALID", `EPUB NCX document could not be parsed: ${ncxDocumentPath}`);
+    warnings.add("TOC_NCX_INVALID", `NCX TOC document could not be parsed; trying other TOC sources: ${ncxDocumentPath}`);
     return null;
   }
 

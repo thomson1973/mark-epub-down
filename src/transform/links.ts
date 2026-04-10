@@ -64,7 +64,7 @@ export function injectAnchorTargets(
         continue;
       }
 
-      element.before(createAnchorElement(document, mergedAnchor));
+      injectAnchorTarget(element, createAnchorElement(document, mergedAnchor));
     }
 
     clearSourceTargetAttributes(element);
@@ -113,7 +113,10 @@ export function rewriteTocTargets(
       if (targetAnchor) {
         href = `#${targetAnchor}`;
       } else {
-        warnings.add("TOC_TARGET_UNRESOLVED", `TOC target could not be mapped exactly: ${item.href}`);
+        warnings.add(
+          "TOC_TARGET_UNRESOLVED",
+          `TOC entry was left as plain text because its target could not be mapped exactly: ${item.href}`,
+        );
       }
     }
 
@@ -133,7 +136,7 @@ function setAnchor(
 ): void {
   const existing = anchorMap.get(targetKey);
   if (existing && existing !== mergedAnchor) {
-    warnings.add("ANCHOR_COLLISION", `anchor target collision detected for ${targetKey}`);
+    warnings.add("ANCHOR_COLLISION", `anchor collision detected; a later target may remain unresolved: ${targetKey}`);
     return;
   }
 
@@ -144,6 +147,16 @@ function createAnchorElement(document: Document, anchorId: string): HTMLAnchorEl
   const anchor = document.createElement("a");
   anchor.setAttribute("id", anchorId);
   return anchor;
+}
+
+function injectAnchorTarget(element: Element, anchor: HTMLAnchorElement): void {
+  const tagName = element.tagName.toLowerCase();
+  if (tagName === "li") {
+    element.prepend(anchor);
+    return;
+  }
+
+  element.before(anchor);
 }
 
 function unwrapNode(node: Element): void {
@@ -187,13 +200,13 @@ function buildUnresolvedLinkWarning(
   if (noteRole) {
     return [
       "NOTE_LINK_UNRESOLVED",
-      `${noteRole} link could not be safely rewritten: ${currentDocumentPath} -> ${href}`,
+      `${noteRole} link was left as plain text because its target could not be rewritten safely: ${currentDocumentPath} -> ${href}`,
     ];
   }
 
   return [
     "INTERNAL_LINK_UNRESOLVED",
-    `internal link could not be safely rewritten: ${currentDocumentPath} -> ${href}`,
+    `internal link was left as plain text because its target could not be rewritten safely: ${currentDocumentPath} -> ${href}`,
   ];
 }
 

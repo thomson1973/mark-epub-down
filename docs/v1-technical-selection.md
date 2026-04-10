@@ -63,9 +63,7 @@ The following spec areas are still intentionally partial rather than fully compl
 
 1. deeper footnote edge cases beyond explicit source anchors and note/backlink semantics
 2. richer table strategy, especially complex-table HTML fallback detection
-3. overwrite confirmation UX for interactive terminals
-4. warning wording/policy refinement
-5. broader malformed-EPUB tolerance and regression coverage
+3. broader malformed-EPUB tolerance and regression coverage
 
 ## Regression Harness
 
@@ -77,14 +75,24 @@ The repo now includes a small regression suite using Node's built-in `node:test`
   - output skeleton generation
   - warning suppression for expected dropped elements
   - `<br>` rendered as plain newline for downstream Markdown tool compatibility
+  - ruby converted to explicit text fallback
+  - RTL text preserved in TOC and body content
+  - degraded-but-readable TOC with unresolved targets downgraded to plain text plus warning
   - explicit footnote/backlink preservation
+  - role-based endnotes stored as list items without losing ordered-list semantics
+  - image-heavy low-text content preserving surviving text while dropping media
+  - row-header tables preserved as Markdown tables without unnecessary HTML fallback
   - simple vs complex table handling
+  - inconsistent package navigation metadata downgraded to warning instead of fatal failure
   - invalid nav downgraded to warning instead of fatal failure
   - NCX fallback when nav parsing fails
   - unreadable NCX downgraded to warning instead of fatal failure
   - invalid NCX downgraded to warning instead of fatal failure
   - missing-TOC warning behavior
+  - impact-oriented warning wording and explicit CLI visibility policy
   - conservative output-file overwrite failure
+  - interactive overwrite confirmation accept path
+  - interactive overwrite confirmation decline / EOF path
 
 ## Known Divergences
 

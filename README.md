@@ -82,6 +82,20 @@ published: 2026-04-09
 - Public v1 spec: [docs/epub-to-md-v1-public-spec.md](docs/epub-to-md-v1-public-spec.md)
 - Technical selection notes: [docs/v1-technical-selection.md](docs/v1-technical-selection.md)
 
+## Limitations
+
+- Fixed Layout EPUB (FXL) is out of scope for the v1 baseline
+- some internal links or TOC targets may degrade to plain text when they cannot be rewritten safely
+- complex tables may remain as HTML instead of being flattened into incorrect Markdown
+- images and other high-confidence non-text media are removed by default in v1
+- output files are never overwritten silently; interactive terminal use may ask for explicit confirmation
+
+## Roadmap
+
+- expand real-world sample coverage for malformed or inconsistent EPUB inputs
+- refine deeper footnote and note-topology edge cases beyond explicit source anchors
+- refine richer table fallback boundaries for more complex publisher markup
+
 ## Development
 
 ```bash

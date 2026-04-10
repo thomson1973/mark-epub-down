@@ -66,7 +66,7 @@ function isComplexTable(table: HTMLTableElement): boolean {
       return true;
     }
 
-    if (cells.some((cell) => cell.tagName.toLowerCase() !== "td")) {
+    if (!isSupportedBodyRow(cells)) {
       return true;
     }
 
@@ -134,4 +134,31 @@ function hasUnsupportedSpan(cells: HTMLTableCellElement[]): boolean {
     const rowspan = Number(cell.getAttribute("rowspan") ?? "1");
     return colspan > 1 || rowspan > 1;
   });
+}
+
+function isSupportedBodyRow(cells: HTMLTableCellElement[]): boolean {
+  let rowHeaderCount = 0;
+
+  for (const [index, cell] of cells.entries()) {
+    const tagName = cell.tagName.toLowerCase();
+    if (tagName === "td") {
+      continue;
+    }
+
+    if (tagName !== "th" || index !== 0 || !isSupportedRowHeader(cell)) {
+      return false;
+    }
+
+    rowHeaderCount += 1;
+    if (rowHeaderCount > 1) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isSupportedRowHeader(cell: HTMLTableCellElement): boolean {
+  const scope = (cell.getAttribute("scope") ?? "").trim().toLowerCase();
+  return scope === "" || scope === "row";
 }
