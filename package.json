@@ -1,15 +1,20 @@
 {
   "name": "mark-epub-down",
   "version": "0.1.0",
-  "description": "EPUB to Markdown source generator for LLM knowledge bases, wikis, and related ingestion pipelines",
+  "description": "EPUB-to-Markdown CLI and Node.js package for LLM knowledge bases, wikis, and ingestion workflows",
   "license": "MIT",
   "keywords": [
     "epub",
+    "epub-to-markdown",
     "markdown",
     "cli",
     "node",
+    "nodejs",
     "llm",
-    "ingestion"
+    "ingestion",
+    "rag",
+    "knowledge-base",
+    "wiki"
   ],
   "homepage": "https://github.com/thomson1973/mark-epub-down#readme",
   "repository": {

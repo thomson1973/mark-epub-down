@@ -1,0 +1,7 @@
+interface:
+  display_name: "mark-epub-down"
+  short_description: "Convert EPUB for LLM ingestion"
+  default_prompt: "Use $mark-epub-down to convert an EPUB into Markdown for LLM ingestion and summarize any warnings or conservative degradation."
+
+policy:
+  allow_implicit_invocation: true

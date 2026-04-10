@@ -1,6 +1,6 @@
 # mark-epub-down
 
-Convert a single EPUB into a single Markdown source document for LLM knowledge bases, wikis, and related ingestion pipelines.
+EPUB-to-Markdown CLI and Node.js package for LLM knowledge bases, wikis, and related ingestion workflows.
 
 ## Why
 
@@ -39,6 +39,8 @@ Or add the package to a Node.js project:
 ```bash
 npm install mark-epub-down
 ```
+
+The GitHub repository also includes Claude Code skill and subagent definitions plus a Codex skill source. These are documented separately in [docs/agent-skills.md](https://github.com/thomson1973/mark-epub-down/blob/main/docs/agent-skills.md) and are not part of the published npm package.
 
 ## CLI Usage
 
@@ -126,6 +128,7 @@ published: 2026-04-09
 
 - Public v1 spec: [docs/epub-to-md-v1-public-spec.md](https://github.com/thomson1973/mark-epub-down/blob/main/docs/epub-to-md-v1-public-spec.md)
 - Technical selection notes: [docs/v1-technical-selection.md](https://github.com/thomson1973/mark-epub-down/blob/main/docs/v1-technical-selection.md)
+- Agent skill setup: [docs/agent-skills.md](https://github.com/thomson1973/mark-epub-down/blob/main/docs/agent-skills.md)
 
 ## Limitations
 
