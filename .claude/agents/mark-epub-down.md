@@ -37,5 +37,3 @@ Use this reporting style:
 - summarize warnings or degradation in plain language
 - say what was preserved and what degraded
 - avoid vague claims like "fully preserved" unless you actually checked the relevant structures
-
-If `skills/mark-epub-down/references/project-workflow.md` is present in the current repository, you may read it for extra project-specific detail. Do not depend on that file being available.

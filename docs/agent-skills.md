@@ -46,7 +46,7 @@ Use the Claude Code skill when you want a slash-invocable workflow such as `/mar
 
 Use the Claude Code subagent when you want a specialized agent visible in `/agents`.
 
-Anthropic documents Claude Code skills separately from subagents. Sources: [Use skills to extend Claude](https://code.claude.com/docs/zh-TW/skills), [Claude Code settings](https://docs.anthropic.com/en/docs/claude-code/settings), [Claude Code subagents](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
+Anthropic documents Claude Code skills separately from subagents. Sources: [Use skills to extend Claude](https://code.claude.com/docs/en/skills), [Claude Code settings](https://code.claude.com/docs/en/settings), [Claude Code subagents](https://code.claude.com/docs/en/sub-agents)
 
 ## Codex
 
