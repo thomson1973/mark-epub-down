@@ -1,4 +1,4 @@
-export const CLI_BINARY_NAME = "epub2md";
+export const CLI_BINARY_NAME = "epub2llm";
 export const GENERATED_TOC_HEADING = "TOC";
 
 export const FRONT_MATTER_FIELDS = [

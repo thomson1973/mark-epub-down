@@ -2,9 +2,8 @@
 
 import { Command } from "commander";
 
-import { convertEpub } from "./application/convert-epub";
-import { ConversionError } from "./domain/errors";
 import { CLI_BINARY_NAME } from "./domain/spec";
+import { runConvertCommand } from "./cli/run-convert-command";
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -17,27 +16,13 @@ async function main(): Promise<void> {
     .option("-o, --output <path>", "output Markdown path")
     .showHelpAfterError("(add -h for usage)")
     .action(async (input: string, options: { output?: string }) => {
-      try {
-        await convertEpub({
-          inputPath: input,
-          outputPath: options.output,
-          cwd: process.cwd(),
-          stdin: process.stdin,
-          stdout: process.stdout,
-          stderr: process.stderr,
-          interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
-        });
-      } catch (error) {
-        if (error instanceof ConversionError) {
-          process.stderr.write(`${CLI_BINARY_NAME}: ${error.message}\n`);
-          process.exitCode = error.exitCode;
-          return;
-        }
-
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`${CLI_BINARY_NAME}: unexpected error: ${message}\n`);
-        process.exitCode = 1;
-      }
+      process.exitCode = await runConvertCommand(input, options, {
+        cwd: process.cwd(),
+        stdin: process.stdin,
+        stdout: process.stdout,
+        stderr: process.stderr,
+        interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+      });
     });
 
   await program.parseAsync(process.argv);

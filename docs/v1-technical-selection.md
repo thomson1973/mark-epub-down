@@ -6,7 +6,7 @@ This document records the implementation choices made strictly from `epub-to-md-
 
 - Supported runtime targets: Node.js `20`, `22`, and `24`
 - Language: TypeScript
-- Module output: CommonJS for a simple Node CLI distribution path
+- Module output: CommonJS for a simple Node CLI and library distribution path
 
 ## Package choices
 
@@ -25,8 +25,12 @@ The codebase is split by the pipeline described in the spec:
 
 - `src/cli.ts`
   - CLI surface and exit handling
+- `src/cli/`
+  - CLI-only overwrite confirmation, reporting, and command orchestration
 - `src/application/convert-epub.ts`
-  - end-to-end orchestration of the v1 pipeline
+  - public file-writing API for Node consumers
+- `src/application/convert-epub-document.ts`
+  - internal conversion core that returns Markdown plus warnings
 - `src/epub/`
   - archive extraction, `container.xml`, OPF parsing, TOC parsing, spine indexing, spine content loading
 - `src/transform/`

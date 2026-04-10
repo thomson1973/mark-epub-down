@@ -26,31 +26,76 @@ This project focuses on producing semantically useful Markdown from EPUB input. 
 - Node.js `20`, `22`, or `24`
 - npm
 
-## Quick Start
+## Install
 
-Install dependencies and build:
+Install the CLI globally:
 
 ```bash
-npm install
-npm run build
+npm install -g mark-epub-down
 ```
+
+Or add the package to a Node.js project:
+
+```bash
+npm install mark-epub-down
+```
+
+## CLI Usage
 
 Convert an EPUB:
 
 ```bash
-node dist/cli.js input.epub
+epub2llm input.epub
 ```
 
 Write to an explicit output path:
 
 ```bash
-node dist/cli.js input.epub -o output.md
+epub2llm input.epub -o output.md
+```
+
+Run without global install:
+
+```bash
+npx --package mark-epub-down epub2llm input.epub
 ```
 
 Show CLI help:
 
 ```bash
-node dist/cli.js --help
+epub2llm --help
+```
+
+Existing output files are never overwritten silently. In an interactive terminal session, the CLI may ask for explicit overwrite confirmation with a default `No` answer.
+
+## Node API
+
+The published package currently exposes a CommonJS API:
+
+```js
+const { convertEpub } = require("mark-epub-down");
+
+(async () => {
+  const result = await convertEpub({
+    inputPath: "input.epub",
+    outputPath: "output.md",
+  });
+
+  console.log(result.outputPath);
+  console.log(result.warnings);
+})();
+```
+
+If the output path already exists, `convertEpub()` throws unless `overwrite: true` is passed:
+
+```js
+(async () => {
+  await convertEpub({
+    inputPath: "input.epub",
+    outputPath: "output.md",
+    overwrite: true,
+  });
+})();
 ```
 
 ## Output Shape
@@ -79,8 +124,8 @@ published: 2026-04-09
 
 ## Docs
 
-- Public v1 spec: [docs/epub-to-md-v1-public-spec.md](docs/epub-to-md-v1-public-spec.md)
-- Technical selection notes: [docs/v1-technical-selection.md](docs/v1-technical-selection.md)
+- Public v1 spec: [docs/epub-to-md-v1-public-spec.md](https://github.com/thomson1973/mark-epub-down/blob/main/docs/epub-to-md-v1-public-spec.md)
+- Technical selection notes: [docs/v1-technical-selection.md](https://github.com/thomson1973/mark-epub-down/blob/main/docs/v1-technical-selection.md)
 
 ## Limitations
 
@@ -99,6 +144,7 @@ published: 2026-04-09
 ## Development
 
 ```bash
+npm install
 npm run build
 npm run typecheck
 npm test

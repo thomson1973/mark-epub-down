@@ -2,7 +2,7 @@
 
 ## Overview
 
-`mark-epub-down` is a Node.js CLI that converts a single EPUB into a single Markdown document.
+`mark-epub-down` is a Node.js CLI and package that converts a single EPUB into a single Markdown document.
 
 The v1 output is intended as source material for LLM knowledge bases, wikis, and related ingestion pipelines. The project prioritizes semantic preservation, source correctness, and low-risk transformation over reader-oriented Markdown polish.
 
@@ -12,6 +12,7 @@ The v1 output is intended as source material for LLM knowledge bases, wikis, and
 - Output: one `.md` file
 - Supported runtime targets: Node.js `20`, `22`, and `24`
 - Implementation language: TypeScript
+- Distribution shape: npm package with CLI and programmatic Node API
 
 ## Goals
 
@@ -33,12 +34,12 @@ The v1 output is intended as source material for LLM knowledge bases, wikis, and
 The v1 CLI keeps a small surface:
 
 ```text
-epub2md <input.epub>
-epub2md <input.epub> -o <output.md>
-epub2md -h
-epub2md --help
-epub2md -V
-epub2md --version
+epub2llm <input.epub>
+epub2llm <input.epub> -o <output.md>
+epub2llm -h
+epub2llm --help
+epub2llm -V
+epub2llm --version
 ```
 
 - The input EPUB is a positional argument.
@@ -46,6 +47,19 @@ epub2md --version
 - If no output path is provided, the tool derives one from the input filename with a `.md` extension.
 - Existing output files are not overwritten silently.
 - In interactive terminal use, the CLI may prompt for explicit overwrite confirmation with a default `No` answer.
+
+## Node API
+
+The package exposes a programmatic `convertEpub()` function for Node.js use.
+
+The stable v1 options are:
+
+- `inputPath`
+- `outputPath`
+- `cwd`
+- `overwrite`
+
+`convertEpub()` writes the Markdown file and returns structured conversion results, including warnings. It does not prompt for overwrite confirmation or print terminal output. If the output target already exists and `overwrite` is not enabled, the function fails conservatively with `OUTPUT_EXISTS`.
 
 ## Output Structure
 
