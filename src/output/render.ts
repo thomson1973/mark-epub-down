@@ -42,7 +42,49 @@ export function renderDocument(input: {
     input.body.trim(),
   ].filter((part) => part.length > 0);
 
-  return `${parts.join("\n\n")}\n`;
+  return `${normalizeMarkdownSpacing(parts.join("\n\n")).trim()}\n`;
+}
+
+export function normalizeMarkdownSpacing(markdown: string): string {
+  const normalizedLines: string[] = [];
+  const lines = markdown.split(/\r?\n/);
+  let previousLineBlank = false;
+  let activeFence: { marker: "`" | "~"; length: number } | null = null;
+
+  for (const line of lines) {
+    if (activeFence) {
+      normalizedLines.push(line);
+
+      if (isClosingFence(line, activeFence)) {
+        activeFence = null;
+      }
+
+      previousLineBlank = false;
+      continue;
+    }
+
+    const openingFence = parseFence(line);
+    if (openingFence) {
+      normalizedLines.push(line);
+      activeFence = openingFence;
+      previousLineBlank = false;
+      continue;
+    }
+
+    if (line.trim().length === 0) {
+      if (!previousLineBlank) {
+        normalizedLines.push("");
+      }
+
+      previousLineBlank = true;
+      continue;
+    }
+
+    normalizedLines.push(line);
+    previousLineBlank = false;
+  }
+
+  return normalizedLines.join("\n");
 }
 
 function renderTocItems(items: TocItem[], depth: number): string[] {
@@ -63,4 +105,26 @@ function renderTocItems(items: TocItem[], depth: number): string[] {
 
 function escapeYaml(value: string): string {
   return JSON.stringify(value);
+}
+
+function parseFence(line: string): { marker: "`" | "~"; length: number } | null {
+  const match = line.match(/^ {0,3}([`~]{3,})(.*)$/);
+  if (!match) {
+    return null;
+  }
+
+  const marker = match[1][0];
+  if (marker !== "`" && marker !== "~") {
+    return null;
+  }
+
+  return {
+    marker,
+    length: match[1].length,
+  };
+}
+
+function isClosingFence(line: string, fence: { marker: "`" | "~"; length: number }): boolean {
+  const match = line.match(/^ {0,3}([`~]{3,})[ \t]*$/);
+  return Boolean(match && match[1][0] === fence.marker && match[1].length >= fence.length);
 }
