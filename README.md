@@ -1,5 +1,10 @@
 # mark-epub-down
 
+[![npm version](https://img.shields.io/npm/v/mark-epub-down?logo=npm)](https://www.npmjs.com/package/mark-epub-down)
+[![Node.js](https://img.shields.io/badge/node-20%20%7C%2022%20%7C%2024-339933?logo=nodedotjs)](https://github.com/thomson1973/mark-epub-down/blob/main/package.json)
+[![CI](https://github.com/thomson1973/mark-epub-down/actions/workflows/ci.yml/badge.svg)](https://github.com/thomson1973/mark-epub-down/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/thomson1973/mark-epub-down/blob/main/LICENSE)
+
 EPUB-to-Markdown CLI and Node.js package for LLM knowledge bases, wikis, and related ingestion workflows.
 
 ## Why
