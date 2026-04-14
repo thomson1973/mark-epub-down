@@ -1,6 +1,6 @@
 {
   "name": "mark-epub-down",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "EPUB-to-Markdown CLI and Node.js package for LLM knowledge bases, wikis, and ingestion workflows",
   "license": "MIT",
   "keywords": [
