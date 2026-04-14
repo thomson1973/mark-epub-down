@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +22,14 @@ async function createOutputPath(name) {
     outputPath: path.join(dir, name),
     cleanup: async () => rm(dir, { recursive: true, force: true }),
   };
+}
+
+function deriveAssetDirectory(outputPath) {
+  return path.join(path.dirname(outputPath), `${path.parse(outputPath).name}.assets`);
+}
+
+function createBinaryFixture(label) {
+  return Buffer.from(`fixture:${label}`, "utf8");
 }
 
 test("converts a basic EPUB into the expected document skeleton", async () => {
@@ -487,6 +495,155 @@ test("keeps sparse text from image-heavy EPUB content while dropping media eleme
   }
 });
 
+test("extracts internal images into a co-located asset namespace and rewrites markdown links", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Extracted Images Book" },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "cover", href: "images/cover.jpg", mediaType: "image/jpeg" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc">
+        <ol><li><a href="chapter1.xhtml">Chapter</a></li></ol>
+      </nav>
+    `),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1>Chapter</h1>
+      <p><img src="images/cover.jpg" alt="Cover image"/></p>
+      <p>Body</p>
+    `),
+    "OEBPS/images/cover.jpg": createBinaryFixture("cover-jpg"),
+  });
+  const output = await createOutputPath("custom-name.md");
+  const assetDirectory = deriveAssetDirectory(output.outputPath);
+
+  try {
+    const result = await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      extractImages: true,
+    });
+    const markdown = await readFile(output.outputPath, "utf8");
+    const extractedImage = await readFile(path.join(assetDirectory, "images", "cover.jpg"));
+
+    assert.equal(result.outputPath, output.outputPath);
+    assert.equal(result.assetOutputPath, assetDirectory);
+    assert.match(markdown, /!\[Cover image\]\(custom-name\.assets\/images\/cover\.jpg\)/);
+    assert.deepEqual(extractedImage, createBinaryFixture("cover-jpg"));
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("extracts cover images wrapped in SVG image elements", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "SVG Cover Book" },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "cover-page", href: "cover.xhtml", mediaType: "application/xhtml+xml", properties: "svg" },
+        { id: "cover", href: "images/cover.jpg", mediaType: "image/jpeg", properties: "cover-image" },
+      ],
+      spineIds: ["cover-page"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc">
+        <ol><li><a href="cover.xhtml">Cover</a></li></ol>
+      </nav>
+    `),
+    "OEBPS/cover.xhtml": `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body epub:type="cover">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <image width="100" height="100" xlink:href="images/cover.jpg"/>
+    </svg>
+  </body>
+</html>
+`,
+    "OEBPS/images/cover.jpg": createBinaryFixture("svg-cover"),
+  });
+  const output = await createOutputPath("svg-cover.md");
+  const assetDirectory = deriveAssetDirectory(output.outputPath);
+
+  try {
+    await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      extractImages: true,
+    });
+
+    const markdown = await readFile(output.outputPath, "utf8");
+    const extractedImage = await readFile(path.join(assetDirectory, "images", "cover.jpg"));
+
+    assert.match(markdown, /!\[\]\(svg-cover\.assets\/images\/cover\.jpg\)/);
+    assert.deepEqual(extractedImage, createBinaryFixture("svg-cover"));
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("preserves nested image paths, reuses repeated references, and deduplicates colliding names safely", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Nested Images Book" },
+      manifestItems: [
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "nested", href: "illustrations/ch01/map.png", mediaType: "image/png" },
+        { id: "package-root", href: "map.png", mediaType: "image/png" },
+        { id: "archive-root", href: "../map.png", mediaType: "image/png" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <p><img src="illustrations/ch01/map.png" alt="Nested map"/></p>
+      <p><img src="illustrations/ch01/map.png" alt="Nested map again"/></p>
+      <p><img src="map.png" alt="Package root map"/></p>
+      <p><img src="../map.png" alt="Archive root map"/></p>
+    `),
+    "OEBPS/illustrations/ch01/map.png": createBinaryFixture("nested-map"),
+    "OEBPS/map.png": createBinaryFixture("package-root-map"),
+    "map.png": createBinaryFixture("archive-root-map"),
+  });
+  const output = await createOutputPath("nested-images.md");
+  const assetDirectory = deriveAssetDirectory(output.outputPath);
+
+  try {
+    await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      extractImages: "all",
+    });
+
+    const markdown = await readFile(output.outputPath, "utf8");
+    const nestedImage = await readFile(path.join(assetDirectory, "illustrations", "ch01", "map.png"));
+    const packageRootImage = await readFile(path.join(assetDirectory, "map.png"));
+    const dedupedImage = await readFile(path.join(assetDirectory, "map-2.png"));
+
+    assert.match(markdown, /!\[Nested map\]\(nested-images\.assets\/illustrations\/ch01\/map\.png\)/);
+    assert.match(markdown, /!\[Nested map again\]\(nested-images\.assets\/illustrations\/ch01\/map\.png\)/);
+    assert.match(markdown, /!\[Package root map\]\(nested-images\.assets\/map\.png\)/);
+    assert.match(markdown, /!\[Archive root map\]\(nested-images\.assets\/map-2\.png\)/);
+    assert.deepEqual(nestedImage, createBinaryFixture("nested-map"));
+    assert.deepEqual(packageRootImage, createBinaryFixture("package-root-map"));
+    assert.deepEqual(dedupedImage, createBinaryFixture("archive-root-map"));
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
 test("treats row-header tables as simple Markdown tables without HTML fallback", async () => {
   const fixture = await createEpubArchive({
     mimetype: "application/epub+zip\n",
@@ -842,6 +999,48 @@ test("fails conservatively when output already exists", async () => {
   }
 });
 
+test("fails conservatively when the asset namespace already exists", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Existing Assets Book" },
+      manifestItems: [
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "cover", href: "images/cover.jpg", mediaType: "image/jpeg" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`<p><img src="images/cover.jpg" alt="Cover"/></p>`),
+    "OEBPS/images/cover.jpg": createBinaryFixture("existing-assets"),
+  });
+  const output = await createOutputPath("existing-assets.md");
+  const assetDirectory = deriveAssetDirectory(output.outputPath);
+
+  try {
+    await mkdir(assetDirectory, { recursive: true });
+    await writeFile(path.join(assetDirectory, "stale.txt"), "stale", "utf8");
+
+    await assert.rejects(
+      () =>
+        convertEpub({
+          inputPath: fixture.epubPath,
+          outputPath: output.outputPath,
+          extractImages: true,
+        }),
+      (error) => {
+        assert.ok(error instanceof ConversionError);
+        assert.equal(error.code, "OUTPUT_EXISTS");
+        assert.match(error.message, new RegExp(escapeForRegExp(assetDirectory)));
+        return true;
+      },
+    );
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
 test("overwrites an existing output file when overwrite is enabled", async () => {
   const fixture = await createEpubArchive({
     mimetype: "application/epub+zip\n",
@@ -952,3 +1151,57 @@ test("overwrites existing output when overwrite is explicitly enabled after a pr
     await output.cleanup();
   }
 });
+
+test("overwrites both markdown and asset namespace together when image extraction is enabled", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Overwrite Assets Book" },
+      manifestItems: [
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "new-image", href: "images/new.jpg", mediaType: "image/jpeg" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <h1>Chapter</h1>
+      <p><img src="images/new.jpg" alt="New image"/></p>
+      <p>Replaced body</p>
+    `),
+    "OEBPS/images/new.jpg": createBinaryFixture("new-image"),
+  });
+  const output = await createOutputPath("overwrite-assets.md");
+  const assetDirectory = deriveAssetDirectory(output.outputPath);
+
+  try {
+    await writeFile(output.outputPath, "already here", "utf8");
+    await mkdir(assetDirectory, { recursive: true });
+    await writeFile(path.join(assetDirectory, "stale.txt"), "stale", "utf8");
+
+    const result = await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      overwrite: true,
+      extractImages: true,
+    });
+
+    const markdown = await readFile(output.outputPath, "utf8");
+    const extractedImage = await readFile(path.join(assetDirectory, "images", "new.jpg"));
+
+    assert.equal(result.outputPath, output.outputPath);
+    assert.equal(result.assetOutputPath, assetDirectory);
+    assert.match(markdown, /!\[New image\]\(overwrite-assets\.assets\/images\/new\.jpg\)/);
+    assert.doesNotMatch(markdown, /already here/);
+    assert.deepEqual(extractedImage, createBinaryFixture("new-image"));
+
+    await assert.rejects(() => readFile(path.join(assetDirectory, "stale.txt"), "utf8"));
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+function escapeForRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

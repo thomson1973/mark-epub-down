@@ -11,7 +11,7 @@ EPUB-to-Markdown CLI and Node.js package for LLM knowledge bases, wikis, and rel
 
 This project focuses on producing semantically useful Markdown from EPUB input. The v1 goal is not visual EPUB reproduction. It prioritizes source order, document structure, TOC preservation, and conservative transformation rules.
 
-The target output is text-first Markdown for LLM knowledge bases, wikis, and related ingestion workflows. In many current ingestion setups, preserving raw image assets or Markdown image links does not reliably produce usable downstream image understanding, while it does add complexity and processing cost.
+The target output is text-first Markdown for LLM knowledge bases, wikis, and related ingestion workflows. In many current ingestion setups, preserving raw image assets or Markdown image links does not reliably produce usable downstream image understanding, while it does add complexity and processing cost. For that reason, v1 keeps image extraction opt-in instead of making it part of the default output path.
 
 ## What v1 Does
 
@@ -20,6 +20,7 @@ The target output is text-first Markdown for LLM knowledge bases, wikis, and rel
 - emits a dedicated `## TOC` section from EPUB-native TOC data
 - includes minimal OPF-derived YAML front matter
 - rewrites internal targets conservatively for merged single-file output
+- can optionally extract internal images into a co-located asset directory and emit Markdown image links
 
 ## What v1 Does Not Do
 
@@ -63,6 +64,12 @@ Write to an explicit output path:
 epub2llm input.epub -o output.md
 ```
 
+Extract internal images into a co-located asset directory:
+
+```bash
+epub2llm input.epub --extract-images
+```
+
 Run without global install:
 
 ```bash
@@ -77,6 +84,8 @@ epub2llm --help
 
 Existing output files are never overwritten silently. In an interactive terminal session, the CLI may ask for explicit overwrite confirmation with a default `No` answer.
 
+When image extraction is enabled, the tool treats the Markdown file and asset directory as one logical output set for overwrite checks.
+
 ## Node API
 
 The published package currently exposes a CommonJS API:
@@ -88,9 +97,11 @@ const { convertEpub } = require("mark-epub-down");
   const result = await convertEpub({
     inputPath: "input.epub",
     outputPath: "output.md",
+    extractImages: "all",
   });
 
   console.log(result.outputPath);
+  console.log(result.assetOutputPath);
   console.log(result.warnings);
 })();
 ```
@@ -131,6 +142,15 @@ published: 2026-04-09
 ...
 ```
 
+With optional image extraction enabled, the output set becomes:
+
+```text
+output.md
+output.assets/
+```
+
+Markdown image links are written relative to `output.md`.
+
 ## Docs
 
 - Public v1 spec: [docs/epub-to-md-v1-public-spec.md](https://github.com/thomson1973/mark-epub-down/blob/main/docs/epub-to-md-v1-public-spec.md)
@@ -142,7 +162,8 @@ published: 2026-04-09
 - Fixed Layout EPUB (FXL) is out of scope for the v1 baseline
 - some internal links or TOC targets may degrade to plain text when they cannot be rewritten safely
 - complex tables may remain as HTML instead of being flattened into incorrect Markdown
-- images and other high-confidence non-text media are removed by default in v1 as a deliberate text-first ingestion boundary
+- images are removed by default in v1 as a deliberate text-first ingestion boundary; optional image extraction currently targets internal raster image resources, including common SVG-wrapped cover or full-page image cases
+- audio, video, CSS background images, and general vector SVG output are not part of the current v1 image-extraction path
 - output files are never overwritten silently; interactive terminal use may ask for explicit confirmation
 
 ## Roadmap

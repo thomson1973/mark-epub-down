@@ -4,22 +4,26 @@ import { parseContainerDocument } from "../epub/container";
 import { parsePackageDocument } from "../epub/opf";
 import { buildSpineIndex } from "../epub/spine";
 import { parseTocDocument } from "../epub/toc";
-import type { WarningRecord } from "../domain/types";
+import { ConversionError } from "../domain/errors";
+import type { ExtractImagesMode, ExtractedAssetRecord, WarningRecord } from "../domain/types";
 import { WarningCollector } from "../domain/warnings";
 import { renderDocument } from "../output/render";
 import { cleanXhtmlDocument } from "../transform/cleanup";
+import { extractAndRewriteImages, prepareImageElementsForExtraction } from "../transform/images";
 import { rewriteInternalLinks, rewriteTocTargets, buildAnchorMap, injectAnchorTargets } from "../transform/links";
 import { createMarkdownConverter } from "../transform/markdown";
 import { processTables } from "../transform/tables";
-import { ConversionError } from "../domain/errors";
 
 export interface ConvertEpubDocumentOptions {
   inputPath: string;
+  extractImages?: ExtractImagesMode;
+  assetLinkPrefix?: string;
 }
 
 export interface ConvertEpubDocumentResult {
   inputPath: string;
   markdown: string;
+  assets: ExtractedAssetRecord[];
   warnings: WarningRecord[];
 }
 
@@ -37,9 +41,16 @@ export async function convertEpubDocument(
     const toc = await parseTocDocument(workingDirectory, packageDocument, warnings);
     const spineDocuments = buildSpineIndex(packageDocument);
     const loadedDocuments = await loadSpineDocuments(workingDirectory, spineDocuments);
+    const shouldExtractImages = options.extractImages === "all" && Boolean(options.assetLinkPrefix);
+
+    if (shouldExtractImages) {
+      prepareImageElementsForExtraction(loadedDocuments);
+    }
 
     for (const loadedDocument of loadedDocuments) {
-      const cleanup = cleanXhtmlDocument(loadedDocument.dom.window.document);
+      const cleanup = cleanXhtmlDocument(loadedDocument.dom.window.document, {
+        preserveImages: shouldExtractImages,
+      });
       if (cleanup.removedTags.length > 0) {
         const uniqueTags = [...new Set(cleanup.removedTags)].join(", ");
         warnings.add(
@@ -85,6 +96,15 @@ export async function convertEpubDocument(
     }
 
     const rewrittenToc = rewriteTocTargets(toc.items, anchorMap, warnings);
+    const assets = shouldExtractImages && options.assetLinkPrefix
+      ? await extractAndRewriteImages({
+        workingDirectory,
+        packageDocument,
+        loadedDocuments,
+        assetLinkPrefix: options.assetLinkPrefix,
+        warnings,
+      })
+      : [];
     const markdownConverter = createMarkdownConverter();
     const body = loadedDocuments
       .filter((loadedDocument) => loadedDocument.spineDocument.linear)
@@ -111,6 +131,7 @@ export async function convertEpubDocument(
     return {
       inputPath: options.inputPath,
       markdown,
+      assets,
       warnings: warnings.list(),
     };
   } finally {

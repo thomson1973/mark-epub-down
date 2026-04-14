@@ -3,10 +3,18 @@ import type { FRONT_MATTER_FIELDS } from "./spec";
 export type MetadataField = (typeof FRONT_MATTER_FIELDS)[number];
 
 export type BookMetadata = Partial<Record<MetadataField, string>>;
+export type ExtractImagesMode = "all";
 
 export interface WarningRecord {
   code: string;
   message: string;
+}
+
+export interface ExtractedAssetRecord {
+  sourceResourcePath: string;
+  outputRelativePath: string;
+  mediaType: string;
+  data: Uint8Array;
 }
 
 export interface ContainerDocument {

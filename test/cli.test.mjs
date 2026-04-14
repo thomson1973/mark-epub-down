@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -49,6 +49,14 @@ async function createOutputPath(name) {
     outputPath: path.join(dir, name),
     cleanup: async () => rm(dir, { recursive: true, force: true }),
   };
+}
+
+function deriveAssetDirectory(outputPath) {
+  return path.join(path.dirname(outputPath), `${path.parse(outputPath).name}.assets`);
+}
+
+function createBinaryFixture(label) {
+  return Buffer.from(`fixture:${label}`, "utf8");
 }
 
 test("CLI reports successful conversion without warnings", async () => {
@@ -151,6 +159,59 @@ test("CLI prints visible warnings and warning count", async () => {
   }
 });
 
+test("CLI reports extracted asset output paths when image extraction is enabled", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "CLI Extract Images Book" },
+      manifestItems: [
+        { id: "nav", href: "nav.xhtml", mediaType: "application/xhtml+xml", properties: "nav" },
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "cover", href: "images/cover.jpg", mediaType: "image/jpeg" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/nav.xhtml": buildNavXhtml(`
+      <nav epub:type="toc">
+        <ol><li><a href="chapter1.xhtml">Chapter</a></li></ol>
+      </nav>
+    `),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`<p><img src="images/cover.jpg" alt="Cover"/></p>`),
+    "OEBPS/images/cover.jpg": createBinaryFixture("cli-cover"),
+  });
+  const output = await createOutputPath("cli-images.md");
+  const assetDirectory = deriveAssetDirectory(output.outputPath);
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  try {
+    const exitCode = await runConvertCommand(
+      fixture.epubPath,
+      { output: output.outputPath, extractImages: "all" },
+      {
+        cwd: process.cwd(),
+        stdin: createInputStream(),
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        interactive: false,
+      },
+    );
+
+    const markdown = await readFile(output.outputPath, "utf8");
+    const extractedImage = await readFile(path.join(assetDirectory, "images", "cover.jpg"));
+
+    assert.equal(exitCode, 0);
+    assert.equal(stderr.text(), "");
+    assert.equal(stdout.text(), `wrote ${output.outputPath} and ${assetDirectory}\n`);
+    assert.match(markdown, /!\[Cover\]\(cli-images\.assets\/images\/cover\.jpg\)/);
+    assert.deepEqual(extractedImage, createBinaryFixture("cli-cover"));
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
 test("CLI prompts before overwriting existing output and continues when confirmed", async () => {
   const fixture = await createEpubArchive({
     mimetype: "application/epub+zip\n",
@@ -191,7 +252,7 @@ test("CLI prompts before overwriting existing output and continues when confirme
 
     const markdown = await readFile(output.outputPath, "utf8");
     assert.equal(exitCode, 0);
-    assert.match(stderr.text(), /overwrite existing output file\?.+\(y\/N\) /);
+    assert.match(stderr.text(), /overwrite existing output set\?.+\(y\/N\) /);
     assert.match(stdout.text(), new RegExp(`^wrote ${escapeForRegExp(output.outputPath)}\\n$`));
     assert.match(markdown, /\n# CLI Overwrite Confirmed Book\n/);
     assert.doesNotMatch(markdown, /already here/);
@@ -235,10 +296,10 @@ test("CLI rejects overwrite when interactive confirmation answer is negative", a
     assert.equal(exitCode, 1);
     assert.equal(stdout.text(), "");
     assert.equal(existingContent, "already here");
-    assert.match(stderr.text(), /overwrite existing output file\?.+\(y\/N\) /);
+    assert.match(stderr.text(), /overwrite existing output set\?.+\(y\/N\) /);
     assert.match(
       stderr.text(),
-      new RegExp(`epub2llm: output file already exists and overwrite was not confirmed: ${escapeForRegExp(output.outputPath)}\\n$`),
+      new RegExp(`epub2llm: output path already exists and overwrite was not confirmed: ${escapeForRegExp(output.outputPath)}\\n$`),
     );
   } finally {
     await fixture.cleanup();
@@ -280,10 +341,60 @@ test("CLI rejects overwrite when interactive confirmation receives EOF", async (
     assert.equal(exitCode, 1);
     assert.equal(stdout.text(), "");
     assert.equal(existingContent, "already here");
-    assert.match(stderr.text(), /overwrite existing output file\?.+\(y\/N\) /);
+    assert.match(stderr.text(), /overwrite existing output set\?.+\(y\/N\) /);
     assert.match(
       stderr.text(),
-      new RegExp(`epub2llm: output file already exists and overwrite was not confirmed: ${escapeForRegExp(output.outputPath)}\\n$`),
+      new RegExp(`epub2llm: output path already exists and overwrite was not confirmed: ${escapeForRegExp(output.outputPath)}\\n$`),
+    );
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("CLI prompt includes the asset namespace when extracted-image output already exists", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "CLI Asset Prompt Book" },
+      manifestItems: [
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "cover", href: "images/cover.jpg", mediaType: "image/jpeg" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`<p><img src="images/cover.jpg" alt="Cover"/></p>`),
+    "OEBPS/images/cover.jpg": createBinaryFixture("cli-prompt-cover"),
+  });
+  const output = await createOutputPath("cli-asset-prompt.md");
+  const assetDirectory = deriveAssetDirectory(output.outputPath);
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  try {
+    await mkdir(assetDirectory, { recursive: true });
+    await writeFile(path.join(assetDirectory, "stale.txt"), "stale", "utf8");
+
+    const exitCode = await runConvertCommand(
+      fixture.epubPath,
+      { output: output.outputPath, extractImages: "all" },
+      {
+        cwd: process.cwd(),
+        stdin: createInputStream("n\n"),
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        interactive: true,
+      },
+    );
+
+    assert.equal(exitCode, 1);
+    assert.equal(stdout.text(), "");
+    assert.match(
+      stderr.text(),
+      new RegExp(
+        `overwrite existing output set\\? ${escapeForRegExp(output.outputPath)} and ${escapeForRegExp(assetDirectory)} \\(y\\/N\\) `,
+      ),
     );
   } finally {
     await fixture.cleanup();

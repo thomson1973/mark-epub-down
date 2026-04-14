@@ -9,7 +9,7 @@ The v1 output is intended as source material for LLM knowledge bases, wikis, and
 ## Scope
 
 - Input: one `.epub` file
-- Output: one `.md` file
+- Output: one `.md` file, optionally with one co-located asset directory
 - Supported runtime targets: Node.js `20`, `22`, and `24`
 - Implementation language: TypeScript
 - Distribution shape: npm package with CLI and programmatic Node API
@@ -36,6 +36,8 @@ The v1 CLI keeps a small surface:
 ```text
 epub2llm <input.epub>
 epub2llm <input.epub> -o <output.md>
+epub2llm <input.epub> --extract-images
+epub2llm <input.epub> --extract-images=all
 epub2llm -h
 epub2llm --help
 epub2llm -V
@@ -44,9 +46,11 @@ epub2llm --version
 
 - The input EPUB is a positional argument.
 - `-o` and `--output` select an explicit output path.
+- `--extract-images` enables opt-in image extraction in `all` mode.
 - If no output path is provided, the tool derives one from the input filename with a `.md` extension.
-- Existing output files are not overwritten silently.
+- Existing output targets are not overwritten silently.
 - In interactive terminal use, the CLI may prompt for explicit overwrite confirmation with a default `No` answer.
+- When image extraction is enabled, the Markdown file and asset directory are treated as one logical output set for overwrite checks.
 
 ## Node API
 
@@ -58,8 +62,11 @@ The stable v1 options are:
 - `outputPath`
 - `cwd`
 - `overwrite`
+- `extractImages`
 
 `convertEpub()` writes the Markdown file and returns structured conversion results, including warnings. It does not prompt for overwrite confirmation or print terminal output. If the output target already exists and `overwrite` is not enabled, the function fails conservatively with `OUTPUT_EXISTS`.
+
+In the current v1 implementation, `extractImages` supports the `all` mode. When enabled, the result includes `assetOutputPath` and the tool writes a co-located asset directory named from the final Markdown output stem, such as `book.assets/`.
 
 ## Output Structure
 
@@ -82,6 +89,13 @@ The front matter stays minimal and only includes values available from EPUB pack
 Missing metadata fields are omitted rather than guessed.
 
 `published` is mapped from EPUB `dc:date`. Full dates and date-times are normalized to `YYYY-MM-DD`. Partial dates such as `YYYY` or `YYYY-MM` are preserved as-is rather than padded with guessed precision.
+
+When image extraction is enabled, the output set becomes:
+
+- one Markdown file
+- one co-located asset directory
+
+Markdown image links are emitted relative to the Markdown output file.
 
 ## Conversion Rules
 
@@ -114,6 +128,8 @@ Missing metadata fields are omitted rather than guessed.
 
 This default cleanup boundary is intentional. The v1 output is designed for text-first Markdown ingestion, and the project does not assume that downstream systems will reliably resolve Markdown image references or separately ingest raw image assets as multimodal inputs.
 
+Image extraction is the current exception to this default removal path. When explicitly enabled, the tool preserves and emits internal image references that it can map confidently into the per-output asset namespace.
+
 The default removable set includes:
 
 - `script`
@@ -138,6 +154,13 @@ The default removable set includes:
 Containers such as `figure`, `figcaption`, `aside`, `section`, `nav`, `div`, and `span` are not removed purely by tag name.
 
 As a result, surrounding text structure can still survive even when embedded non-text media is dropped.
+
+When image extraction is enabled in the current v1 implementation:
+
+- standard XHTML `img` elements may be emitted as Markdown image links
+- common `svg > image` wrappers used for covers or full-page image content may also be extracted through the same image path
+- non-image media remains outside this extraction path
+- general vector SVG output is not preserved as a standalone asset contract
 
 ### Core element mapping
 
@@ -177,4 +200,4 @@ Warnings may be summarized in CLI output, and some low-signal warnings may be re
 ## Validation Boundary
 
 - Fixed Layout EPUB (FXL) is out of scope for v1.
-- Validation should cover nested TOCs, footnotes, CJK ruby content, tables, image-heavy EPUBs, degraded TOC metadata, incomplete metadata, and RTL samples.
+- Validation should cover nested TOCs, footnotes, CJK ruby content, tables, image-heavy EPUBs, degraded TOC metadata, incomplete metadata, RTL samples, and common SVG-wrapped raster image cases.
