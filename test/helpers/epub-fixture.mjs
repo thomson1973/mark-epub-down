@@ -9,7 +9,12 @@ export async function createEpubArchive(files) {
   for (const [relativePath, content] of Object.entries(files)) {
     const absolutePath = path.join(rootDir, relativePath);
     await mkdir(path.dirname(absolutePath), { recursive: true });
-    await writeFile(absolutePath, content, "utf8");
+    if (typeof content === "string") {
+      await writeFile(absolutePath, content, "utf8");
+      continue;
+    }
+
+    await writeFile(absolutePath, content);
   }
 
   const epubPath = `${rootDir}.epub`;

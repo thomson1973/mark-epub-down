@@ -1,9 +1,9 @@
 export async function confirmOverwrite(
-  outputPath: string,
+  outputDescription: string,
   stdin: NodeJS.ReadableStream,
   stderr: NodeJS.WritableStream,
 ): Promise<boolean> {
-  stderr.write(`overwrite existing output file? ${outputPath} (y/N) `);
+  stderr.write(`overwrite existing output set? ${outputDescription} (y/N) `);
 
   try {
     const answer = await readSingleLine(stdin);

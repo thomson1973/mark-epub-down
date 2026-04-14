@@ -10,7 +10,7 @@ export function reportConversionResult(
 ): void {
   const cliWarnings = summarizeWarnings(getCliVisibleWarnings(result.warnings));
   emitWarnings(stderr, cliWarnings);
-  emitSuccess(stdout, result.outputPath, cliWarnings.length);
+  emitSuccess(stdout, result.outputPath, result.assetOutputPath, cliWarnings.length);
 }
 
 export function reportCliError(stderr: NodeJS.WritableStream, message: string): void {
@@ -23,7 +23,13 @@ function emitWarnings(stderr: NodeJS.WritableStream, warnings: WarningRecord[]):
   }
 }
 
-function emitSuccess(stdout: NodeJS.WritableStream, outputPath: string, warningCount: number): void {
+function emitSuccess(
+  stdout: NodeJS.WritableStream,
+  outputPath: string,
+  assetOutputPath: string | undefined,
+  warningCount: number,
+): void {
   const suffix = warningCount > 0 ? ` (${warningCount === 1 ? "1 warning" : `${warningCount} warnings`})` : "";
-  stdout.write(`wrote ${outputPath}${suffix}\n`);
+  const outputDescription = assetOutputPath ? `${outputPath} and ${assetOutputPath}` : outputPath;
+  stdout.write(`wrote ${outputDescription}${suffix}\n`);
 }

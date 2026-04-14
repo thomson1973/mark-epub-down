@@ -4,10 +4,14 @@ export interface CleanupResult {
   removedTags: string[];
 }
 
-export function cleanXhtmlDocument(document: Document): CleanupResult {
+export function cleanXhtmlDocument(document: Document, options?: { preserveImages?: boolean }): CleanupResult {
   const removedTags: string[] = [];
 
   for (const tagName of REMOVABLE_TAGS) {
+    if (tagName === "img" && options?.preserveImages) {
+      continue;
+    }
+
     const nodes = Array.from(document.getElementsByTagName(tagName));
     for (const node of nodes) {
       node.remove();

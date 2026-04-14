@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { convertEpub } from "../application/convert-epub";
 import { ConversionError } from "../domain/errors";
-import { deriveOutputPath } from "../utils/path";
+import { deriveOutputPlan, describeOutputPlan } from "../utils/path";
 import { confirmOverwrite } from "./confirm-overwrite";
 import { reportCliError, reportConversionResult } from "./reporting";
 
@@ -16,7 +16,7 @@ export interface RunConvertCommandContext {
 
 export async function runConvertCommand(
   input: string,
-  options: { output?: string },
+  options: { output?: string; extractImages?: "all" },
   context: RunConvertCommandContext,
 ): Promise<number> {
   try {
@@ -24,6 +24,7 @@ export async function runConvertCommand(
       inputPath: input,
       outputPath: options.output,
       cwd: context.cwd,
+      extractImages: options.extractImages,
     });
     reportConversionResult(context.stdout, context.stderr, result);
     return 0;
@@ -36,8 +37,14 @@ export async function runConvertCommand(
 
     if (error.code === "OUTPUT_EXISTS" && context.interactive) {
       const inputPath = path.resolve(context.cwd, input);
-      const outputPath = deriveOutputPath(inputPath, options.output, context.cwd);
-      const confirmed = await confirmOverwrite(outputPath, context.stdin, context.stderr);
+      const outputPlan = deriveOutputPlan(inputPath, options.output, context.cwd, {
+        extractImages: options.extractImages === "all",
+      });
+      const confirmed = await confirmOverwrite(
+        describeOutputPlan(outputPlan),
+        context.stdin,
+        context.stderr,
+      );
       if (confirmed) {
         try {
           const result = await convertEpub({
@@ -45,6 +52,7 @@ export async function runConvertCommand(
             outputPath: options.output,
             cwd: context.cwd,
             overwrite: true,
+            extractImages: options.extractImages,
           });
           reportConversionResult(context.stdout, context.stderr, result);
           return 0;
@@ -62,7 +70,7 @@ export async function runConvertCommand(
 
       reportCliError(
         context.stderr,
-        `output file already exists and overwrite was not confirmed: ${outputPath}`,
+        `output path already exists and overwrite was not confirmed: ${describeOutputPlan(outputPlan)}`,
       );
       return 1;
     }

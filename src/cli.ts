@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Command } from "commander";
+import { Command, InvalidArgumentError, Option } from "commander";
 
 import { CLI_BINARY_NAME } from "./domain/spec";
 import { runConvertCommand } from "./cli/run-convert-command";
@@ -15,7 +15,7 @@ async function main(): Promise<void> {
     .argument("<input>", "input EPUB file")
     .option("-o, --output <path>", "output Markdown path")
     .showHelpAfterError("(add -h for usage)")
-    .action(async (input: string, options: { output?: string }) => {
+    .action(async (input: string, options: { output?: string; extractImages?: "all" }) => {
       process.exitCode = await runConvertCommand(input, options, {
         cwd: process.cwd(),
         stdin: process.stdin,
@@ -25,7 +25,24 @@ async function main(): Promise<void> {
       });
     });
 
+  program.addOption(
+    new Option(
+      "--extract-images [mode]",
+      "extract internal images into a co-located asset directory (supported mode: all)",
+    )
+      .preset("all")
+      .argParser(parseExtractImagesMode),
+  );
+
   await program.parseAsync(process.argv);
 }
 
 void main();
+
+function parseExtractImagesMode(value: string): "all" {
+  if (value === "all") {
+    return value;
+  }
+
+  throw new InvalidArgumentError(`expected "all", received "${value}"`);
+}
