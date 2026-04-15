@@ -6,6 +6,13 @@ import { deriveOutputPlan, describeOutputPlan } from "../utils/path";
 import { confirmOverwrite } from "./confirm-overwrite";
 import { reportCliError, reportConversionResult } from "./reporting";
 
+export interface RunConvertCommandOptions {
+  output?: string;
+  extractImages?: "all";
+  outputLayout?: "co-located" | "split";
+  splitRoot?: string;
+}
+
 export interface RunConvertCommandContext {
   cwd: string;
   stdin: NodeJS.ReadableStream;
@@ -16,7 +23,7 @@ export interface RunConvertCommandContext {
 
 export async function runConvertCommand(
   input: string,
-  options: { output?: string; extractImages?: "all" },
+  options: RunConvertCommandOptions,
   context: RunConvertCommandContext,
 ): Promise<number> {
   try {
@@ -25,6 +32,8 @@ export async function runConvertCommand(
       outputPath: options.output,
       cwd: context.cwd,
       extractImages: options.extractImages,
+      outputLayout: options.outputLayout,
+      splitRootDir: options.splitRoot,
     });
     reportConversionResult(context.stdout, context.stderr, result);
     return 0;
@@ -39,6 +48,8 @@ export async function runConvertCommand(
       const inputPath = path.resolve(context.cwd, input);
       const outputPlan = deriveOutputPlan(inputPath, options.output, context.cwd, {
         extractImages: options.extractImages === "all",
+        outputLayout: options.outputLayout,
+        splitRootDir: options.splitRoot,
       });
       const confirmed = await confirmOverwrite(
         describeOutputPlan(outputPlan),
@@ -53,6 +64,8 @@ export async function runConvertCommand(
             cwd: context.cwd,
             overwrite: true,
             extractImages: options.extractImages,
+            outputLayout: options.outputLayout,
+            splitRootDir: options.splitRoot,
           });
           reportConversionResult(context.stdout, context.stderr, result);
           return 0;

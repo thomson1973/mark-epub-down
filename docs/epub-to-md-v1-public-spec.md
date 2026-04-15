@@ -9,7 +9,7 @@ The v1 output is intended as source material for LLM knowledge bases, wikis, and
 ## Scope
 
 - Input: one `.epub` file
-- Output: one `.md` file, optionally with one co-located asset directory
+- Output: one `.md` file, optionally with one per-output asset namespace in either co-located or split layout
 - Supported runtime targets: Node.js `20`, `22`, and `24`
 - Implementation language: TypeScript
 - Distribution shape: npm package with CLI and programmatic Node API
@@ -38,6 +38,7 @@ epub2llm <input.epub>
 epub2llm <input.epub> -o <output.md>
 epub2llm <input.epub> --extract-images
 epub2llm <input.epub> --extract-images=all
+epub2llm <input.epub> --extract-images --output-layout=split --split-root <dir>
 epub2llm -h
 epub2llm --help
 epub2llm -V
@@ -47,7 +48,10 @@ epub2llm --version
 - The input EPUB is a positional argument.
 - `-o` and `--output` select an explicit output path.
 - `--extract-images` enables opt-in image extraction in `all` mode.
+- `--output-layout` selects the extracted-image layout. It is only valid when image extraction is enabled. The default extracted-image layout is `co-located`.
+- `--split-root` sets the root directory for split `sources/` and `assets/` output. It is only valid with `--output-layout=split` and cannot be combined with `--output`.
 - If no output path is provided, the tool derives one from the input filename with a `.md` extension.
+- In `split` layout, an explicit output path must be under a `sources/` directory so the asset namespace can be mirrored under a sibling `assets/` directory.
 - Existing output targets are not overwritten silently.
 - In interactive terminal use, the CLI may prompt for explicit overwrite confirmation with a default `No` answer.
 - When image extraction is enabled, the Markdown file and asset directory are treated as one logical output set for overwrite checks.
@@ -63,10 +67,14 @@ The stable v1 options are:
 - `cwd`
 - `overwrite`
 - `extractImages`
+- `outputLayout`
+- `splitRootDir`
 
 `convertEpub()` writes the Markdown file and returns structured conversion results, including warnings. It does not prompt for overwrite confirmation or print terminal output. If the output target already exists and `overwrite` is not enabled, the function fails conservatively with `OUTPUT_EXISTS`.
 
-In the current v1 implementation, `extractImages` supports the `all` mode. When enabled, the result includes `assetOutputPath` and the tool writes a co-located asset directory named from the final Markdown output stem, such as `book.assets/`.
+In the current v1 implementation, `extractImages` supports the `all` mode. When enabled, the result includes `assetOutputPath`. The tool writes either a co-located asset directory named from the final Markdown output stem, such as `book.assets/`, or a split asset namespace under `assets/<relative-dir>/<output-stem>/`.
+
+If image extraction is not enabled, `outputLayout` and `splitRootDir` are invalid because the Markdown-only path does not project into a separate asset layout.
 
 ## Output Structure
 
@@ -93,9 +101,18 @@ Missing metadata fields are omitted rather than guessed.
 When image extraction is enabled, the output set becomes:
 
 - one Markdown file
-- one co-located asset directory
+- one per-output asset namespace
 
 Markdown image links are emitted relative to the Markdown output file.
+
+The supported layout projections are:
+
+- `co-located`: `output.md` with `output.assets/`
+- `split`: `sources/output.md` with `assets/output/`
+
+When `split` layout uses nested subpaths such as `sources/fiction/book.md`, the asset namespace is mirrored as `assets/fiction/book/`, and Markdown image links are computed from the final Markdown file location to that mirrored asset directory.
+
+These split-layout links use normal relative filesystem paths. If a downstream Markdown tool cannot resolve multi-level `../` asset links consistently, that limitation belongs to the downstream tool rather than to the output contract defined here.
 
 ## Conversion Rules
 

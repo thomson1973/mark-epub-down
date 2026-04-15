@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { convertEpubDocument } from "./convert-epub-document";
 import { ConversionError } from "../domain/errors";
-import type { ExtractImagesMode, ExtractedAssetRecord, WarningRecord } from "../domain/types";
+import type { ExtractImagesMode, ExtractedAssetRecord, OutputLayout, WarningRecord } from "../domain/types";
 import { deriveOutputPlan, ensureOutputPlanAvailable, type OutputPlan } from "../utils/path";
 
 export interface ConvertEpubOptions {
@@ -12,6 +12,8 @@ export interface ConvertEpubOptions {
   cwd?: string;
   overwrite?: boolean;
   extractImages?: boolean | ExtractImagesMode;
+  outputLayout?: OutputLayout;
+  splitRootDir?: string;
 }
 
 export interface ConvertEpubResult {
@@ -27,6 +29,8 @@ export async function convertEpub(options: ConvertEpubOptions): Promise<ConvertE
   const extractImages = normalizeExtractImagesMode(options.extractImages);
   const outputPlan = deriveOutputPlan(inputPath, options.outputPath, cwd, {
     extractImages: extractImages === "all",
+    outputLayout: options.outputLayout,
+    splitRootDir: options.splitRootDir,
   });
 
   await assertInputExists(inputPath);
@@ -95,6 +99,7 @@ async function writeOutputSet(
     }
 
     if (stagedAssetDirectoryPath && outputPlan.assetDirectoryPath) {
+      await mkdir(path.dirname(outputPlan.assetDirectoryPath), { recursive: true });
       await rename(stagedAssetDirectoryPath, outputPlan.assetDirectoryPath);
     }
 

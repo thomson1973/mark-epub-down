@@ -24,8 +24,37 @@ async function createOutputPath(name) {
   };
 }
 
+async function createSplitOutputPath(relativePathWithinSources) {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "epub2md-split-out-"));
+  const outputPath = path.join(rootDir, "sources", relativePathWithinSources);
+  return {
+    rootDir,
+    outputPath,
+    assetDirectory: deriveSplitAssetDirectory(outputPath),
+    cleanup: async () => rm(rootDir, { recursive: true, force: true }),
+  };
+}
+
 function deriveAssetDirectory(outputPath) {
   return path.join(path.dirname(outputPath), `${path.parse(outputPath).name}.assets`);
+}
+
+function deriveSplitAssetDirectory(outputPath) {
+  const resolvedOutputPath = path.resolve(outputPath);
+  const root = path.parse(resolvedOutputPath).root;
+  const parts = path.relative(root, resolvedOutputPath).split(path.sep).filter(Boolean);
+  const sourcesIndex = parts.lastIndexOf("sources");
+
+  assert.notEqual(sourcesIndex, -1);
+
+  const splitRootDir = path.join(root, ...parts.slice(0, sourcesIndex));
+  const relativePathWithinSources = path.join(...parts.slice(sourcesIndex + 1));
+  return path.join(
+    splitRootDir,
+    "assets",
+    path.dirname(relativePathWithinSources),
+    path.parse(resolvedOutputPath).name,
+  );
 }
 
 function createBinaryFixture(label) {
@@ -644,6 +673,88 @@ test("preserves nested image paths, reuses repeated references, and deduplicates
   }
 });
 
+test("writes extracted images into split sources/assets roots derived from splitRootDir", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Split Root Book" },
+      manifestItems: [
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "cover", href: "images/cover.jpg", mediaType: "image/jpeg" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <p><img src="images/cover.jpg" alt="Cover"/></p>
+    `),
+    "OEBPS/images/cover.jpg": createBinaryFixture("split-root-cover"),
+  });
+  const splitRootDir = await mkdtemp(path.join(os.tmpdir(), "epub2md-split-root-"));
+  const expectedOutputPath = path.join(splitRootDir, "sources", `${path.parse(fixture.epubPath).name}.md`);
+  const expectedAssetDirectory = path.join(splitRootDir, "assets", path.parse(expectedOutputPath).name);
+
+  try {
+    const result = await convertEpub({
+      inputPath: fixture.epubPath,
+      extractImages: true,
+      outputLayout: "split",
+      splitRootDir,
+    });
+
+    const markdown = await readFile(expectedOutputPath, "utf8");
+    const extractedImage = await readFile(path.join(expectedAssetDirectory, "images", "cover.jpg"));
+
+    assert.equal(result.outputPath, expectedOutputPath);
+    assert.equal(result.assetOutputPath, expectedAssetDirectory);
+    assert.match(markdown, /!\[Cover\]\(\.\.\/assets\/[^/]+\/images\/cover\.jpg\)/);
+    assert.deepEqual(extractedImage, createBinaryFixture("split-root-cover"));
+  } finally {
+    await fixture.cleanup();
+    await rm(splitRootDir, { recursive: true, force: true });
+  }
+});
+
+test("mirrors nested sources subpaths into split asset namespaces and rewrites relative links", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Split Mirror Book" },
+      manifestItems: [
+        { id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" },
+        { id: "cover", href: "images/cover.jpg", mediaType: "image/jpeg" },
+      ],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`
+      <p><img src="images/cover.jpg" alt="Nested cover"/></p>
+    `),
+    "OEBPS/images/cover.jpg": createBinaryFixture("split-mirror-cover"),
+  });
+  const output = await createSplitOutputPath(path.join("fiction", "book.md"));
+
+  try {
+    const result = await convertEpub({
+      inputPath: fixture.epubPath,
+      outputPath: output.outputPath,
+      extractImages: true,
+      outputLayout: "split",
+    });
+
+    const markdown = await readFile(output.outputPath, "utf8");
+    const extractedImage = await readFile(path.join(output.assetDirectory, "images", "cover.jpg"));
+
+    assert.equal(result.outputPath, output.outputPath);
+    assert.equal(result.assetOutputPath, output.assetDirectory);
+    assert.match(markdown, /!\[Nested cover\]\(\.\.\/\.\.\/assets\/fiction\/book\/images\/cover\.jpg\)/);
+    assert.deepEqual(extractedImage, createBinaryFixture("split-mirror-cover"));
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
 test("treats row-header tables as simple Markdown tables without HTML fallback", async () => {
   const fixture = await createEpubArchive({
     mimetype: "application/epub+zip\n",
@@ -1032,6 +1143,73 @@ test("fails conservatively when the asset namespace already exists", async () =>
         assert.ok(error instanceof ConversionError);
         assert.equal(error.code, "OUTPUT_EXISTS");
         assert.match(error.message, new RegExp(escapeForRegExp(assetDirectory)));
+        return true;
+      },
+    );
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("rejects split layout output paths that are not under a sources directory", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Invalid Split Path Book" },
+      manifestItems: [{ id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" }],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`<h1>Chapter</h1>`),
+  });
+  const output = await createOutputPath("invalid-split.md");
+
+  try {
+    await assert.rejects(
+      () => convertEpub({
+        inputPath: fixture.epubPath,
+        outputPath: output.outputPath,
+        extractImages: true,
+        outputLayout: "split",
+      }),
+      (error) => {
+        assert.ok(error instanceof ConversionError);
+        assert.equal(error.code, "INVALID_OPTIONS");
+        assert.match(error.message, /split layout requires outputPath to be under a sources directory/);
+        return true;
+      },
+    );
+  } finally {
+    await fixture.cleanup();
+    await output.cleanup();
+  }
+});
+
+test("rejects split layout when image extraction is not enabled", async () => {
+  const fixture = await createEpubArchive({
+    mimetype: "application/epub+zip\n",
+    "META-INF/container.xml": buildContainerXml(),
+    "OEBPS/content.opf": buildOpfXml({
+      metadata: { title: "Split Without Images Book" },
+      manifestItems: [{ id: "chapter1", href: "chapter1.xhtml", mediaType: "application/xhtml+xml" }],
+      spineIds: ["chapter1"],
+    }),
+    "OEBPS/chapter1.xhtml": buildContentXhtml(`<h1>Chapter</h1>`),
+  });
+  const output = await createSplitOutputPath("book.md");
+
+  try {
+    await assert.rejects(
+      () => convertEpub({
+        inputPath: fixture.epubPath,
+        outputPath: output.outputPath,
+        outputLayout: "split",
+      }),
+      (error) => {
+        assert.ok(error instanceof ConversionError);
+        assert.equal(error.code, "INVALID_OPTIONS");
+        assert.match(error.message, /split layout requires image extraction to be enabled/);
         return true;
       },
     );

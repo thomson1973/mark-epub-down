@@ -3,7 +3,7 @@
 import { Command, InvalidArgumentError, Option } from "commander";
 
 import { CLI_BINARY_NAME } from "./domain/spec";
-import { runConvertCommand } from "./cli/run-convert-command";
+import { runConvertCommand, type RunConvertCommandOptions } from "./cli/run-convert-command";
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -15,7 +15,7 @@ async function main(): Promise<void> {
     .argument("<input>", "input EPUB file")
     .option("-o, --output <path>", "output Markdown path")
     .showHelpAfterError("(add -h for usage)")
-    .action(async (input: string, options: { output?: string; extractImages?: "all" }) => {
+    .action(async (input: string, options: RunConvertCommandOptions) => {
       process.exitCode = await runConvertCommand(input, options, {
         cwd: process.cwd(),
         stdin: process.stdin,
@@ -28,10 +28,22 @@ async function main(): Promise<void> {
   program.addOption(
     new Option(
       "--extract-images [mode]",
-      "extract internal images into a co-located asset directory (supported mode: all)",
+      "extract internal images into per-output asset directories (supported mode: all)",
     )
       .preset("all")
       .argParser(parseExtractImagesMode),
+  );
+  program.addOption(
+    new Option(
+      "--output-layout <layout>",
+      "set the extracted-image output layout (supported layouts: co-located, split)",
+    ).argParser(parseOutputLayout),
+  );
+  program.addOption(
+    new Option(
+      "--split-root <dir>",
+      "set the split-layout root directory; requires --output-layout=split and cannot be combined with --output",
+    ),
   );
 
   await program.parseAsync(process.argv);
@@ -45,4 +57,12 @@ function parseExtractImagesMode(value: string): "all" {
   }
 
   throw new InvalidArgumentError(`expected "all", received "${value}"`);
+}
+
+function parseOutputLayout(value: string): "co-located" | "split" {
+  if (value === "co-located" || value === "split") {
+    return value;
+  }
+
+  throw new InvalidArgumentError(`expected "co-located" or "split", received "${value}"`);
 }

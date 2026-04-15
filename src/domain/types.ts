@@ -4,6 +4,7 @@ export type MetadataField = (typeof FRONT_MATTER_FIELDS)[number];
 
 export type BookMetadata = Partial<Record<MetadataField, string>>;
 export type ExtractImagesMode = "all";
+export type OutputLayout = "co-located" | "split";
 
 export interface WarningRecord {
   code: string;

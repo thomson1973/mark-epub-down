@@ -42,7 +42,7 @@ The codebase is split by the pipeline described in the spec:
 - `src/utils/`
   - path derivation and conservative output handling
 
-## Current MVP coverage
+## Current coverage
 
 The current implementation now covers the minimum viable pipeline:
 
@@ -59,7 +59,8 @@ The current implementation now covers the minimum viable pipeline:
 11. XHTML-to-Markdown conversion
 12. front matter, book title, TOC, and merged body rendering
 13. final Markdown file emission
-14. stderr warning emission
+14. co-located and split per-output asset layout planning for optional image extraction
+15. stderr warning emission
 
 ## Still intentionally deferred
 

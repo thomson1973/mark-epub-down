@@ -20,7 +20,7 @@ The target output is text-first Markdown for LLM knowledge bases, wikis, and rel
 - emits a dedicated `## TOC` section from EPUB-native TOC data
 - includes minimal OPF-derived YAML front matter
 - rewrites internal targets conservatively for merged single-file output
-- can optionally extract internal images into a co-located asset directory and emit Markdown image links
+- can optionally extract internal images into co-located or split per-output asset directories and emit Markdown image links
 
 ## What v1 Does Not Do
 
@@ -70,6 +70,12 @@ Extract internal images into a co-located asset directory:
 epub2llm input.epub --extract-images
 ```
 
+Extract internal images into split `sources/` and `assets/` roots:
+
+```bash
+epub2llm input.epub --extract-images --output-layout=split --split-root raw
+```
+
 Run without global install:
 
 ```bash
@@ -85,6 +91,10 @@ epub2llm --help
 Existing output files are never overwritten silently. In an interactive terminal session, the CLI may ask for explicit overwrite confirmation with a default `No` answer.
 
 When image extraction is enabled, the tool treats the Markdown file and asset directory as one logical output set for overwrite checks.
+
+`--output-layout` only applies when image extraction is enabled. It does not change the Markdown-only default output path.
+
+When `--output-layout=split` is used, `--split-root` sets the sibling `sources/` and `assets/` roots. If you use `-o` instead, the output path must live under a `sources/` directory so the matching asset namespace can be mirrored under `assets/`.
 
 ## Node API
 
@@ -103,6 +113,19 @@ const { convertEpub } = require("mark-epub-down");
   console.log(result.outputPath);
   console.log(result.assetOutputPath);
   console.log(result.warnings);
+})();
+```
+
+Split layout is also available through the Node API:
+
+```js
+(async () => {
+  await convertEpub({
+    inputPath: "input.epub",
+    extractImages: "all",
+    outputLayout: "split",
+    splitRootDir: "raw",
+  });
 })();
 ```
 
@@ -150,6 +173,20 @@ output.assets/
 ```
 
 Markdown image links are written relative to `output.md`.
+
+With split layout enabled, the output set becomes:
+
+```text
+raw/
+  sources/
+    output.md
+  assets/
+    output/
+```
+
+Nested subpaths under `sources/` are mirrored under `assets/`, and Markdown image links are written relative to the final Markdown file location.
+
+In split layout, these image links use standard relative filesystem paths from the final Markdown file to the mirrored asset namespace. Some Markdown tools may impose their own preview or workspace-root restrictions on multi-level `../` image paths; that tool-specific behavior is outside this project's output contract.
 
 ## Docs
 
